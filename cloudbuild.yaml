@@ -32,6 +32,7 @@ steps:
       - --min-instances=0
       - --max-instances=10
       - --timeout=60
+      - --set-secrets=OPENROUTER_API_KEY=openrouter-api-key:latest
     id: cloud-run-deploy
     waitFor: ['docker-push']
 
@@ -66,6 +67,8 @@ availableSecrets:
       env: FIREBASE_TOKEN
     - versionName: projects/${PROJECT_ID}/secrets/vite-api-url/versions/latest
       env: VITE_API_URL
+    - versionName: projects/${PROJECT_ID}/secrets/openrouter-api-key/versions/latest
+      env: OPENROUTER_API_KEY
 
 substitutions:
   _REGION: us-central1

@@ -32,9 +32,25 @@ echo -n "YOUR_FIREBASE_CI_TOKEN" | \
 # Backend API URL (set after first Cloud Run deploy)
 echo -n "https://YOUR-CLOUD-RUN-URL" | \
   gcloud secrets create vite-api-url --data-file=-
+
+# OpenRouter API key (get from https://openrouter.ai/keys)
+echo -n "YOUR_OPENROUTER_API_KEY" | \
+  gcloud secrets create openrouter-api-key --data-file=-
 ```
 
-### 4. GitHub Actions — Workload Identity Federation
+### 4. Grant Cloud Run access to secrets
+The Cloud Run service identity needs permission to read Secret Manager secrets at runtime:
+```bash
+# Default Cloud Run service account format: PROJECT_NUMBER-compute@developer.gserviceaccount.com
+# Find your project number:
+PROJECT_NUMBER=$(gcloud projects describe PROJECT_ID --format='value(projectNumber)')
+
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+### 5. GitHub Actions — Workload Identity Federation
 ```bash
 # Create service account
 gcloud iam service-accounts create github-actions \
@@ -65,10 +81,10 @@ gcloud iam workload-identity-pools providers create-oidc github-provider \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository"
 ```
 
-### 5. Add GitHub Actions secrets
+### 6. Add GitHub Actions secrets
 In your repo Settings → Secrets → Actions, add:
 - `GCP_PROJECT_ID` — your GCP project ID
-- `GCP_WORKLOAD_IDENTITY_PROVIDER` — from step 4 output
+- `GCP_WORKLOAD_IDENTITY_PROVIDER` — from step 5 output
 - `GCP_SERVICE_ACCOUNT` — `github-actions@PROJECT_ID.iam.gserviceaccount.com`
 
 ## Local development
@@ -77,8 +93,9 @@ In your repo Settings → Secrets → Actions, add:
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8080
+OPENROUTER_API_KEY=your_key uvicorn main:app --reload --port 8080
 ```
+The `OPENROUTER_API_KEY` env var enables the AI summary. Without it the summary field is omitted gracefully.
 
 ### Frontend
 ```bash

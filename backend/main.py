@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +15,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
+from analysis.summarizer import generate_summary
 
 app = FastAPI(title="Unpaid Advisor API", version="1.0.0")
 
@@ -49,6 +53,20 @@ def analyze(symbol: str):
     change = round(price - prev_close, 2) if price and prev_close else None
     change_pct = round(change / prev_close * 100, 2) if change and prev_close else None
 
+    kpis = get_kpis(data)
+    fundamentals = get_fundamentals(data)
+
+    summary = generate_summary(
+        symbol=symbol,
+        company_name=info.get("longName") or info.get("shortName", symbol),
+        verdict=score_data["verdict"],
+        confidence=score_data["confidence"],
+        factors=score_data["factors"],
+        rule_results=score_data["rule_results"],
+        kpis=kpis,
+        fundamentals=fundamentals,
+    )
+
     return {
         "symbol": symbol,
         "company_name": info.get("longName") or info.get("shortName", symbol),
@@ -59,10 +77,11 @@ def analyze(symbol: str):
         "prev_close": prev_close,
         "change": change,
         "change_pct": change_pct,
-        "kpis": get_kpis(data),
-        "fundamentals": get_fundamentals(data),
+        "kpis": kpis,
+        "fundamentals": fundamentals,
         "technicals": get_technicals(data),
         "history": get_history(data),
         "news": get_news(data),
+        "summary": summary,
         **score_data,
     }

@@ -172,6 +172,7 @@ export default function App() {
                 verdict={data.verdict}
                 confidence={data.confidence}
                 factors={data.factors}
+                summary={data.summary}
               />
             </div>
 

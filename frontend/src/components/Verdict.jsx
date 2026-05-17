@@ -6,7 +6,7 @@ const factorColor = (score) => {
   return '#f56565'
 }
 
-export default function Verdict({ verdict, confidence, factors }) {
+export default function Verdict({ verdict, confidence, factors, summary }) {
   const buy = isBuy(verdict)
 
   return (
@@ -83,6 +83,23 @@ export default function Verdict({ verdict, confidence, factors }) {
           </div>
         ))}
       </div>
+
+      {summary && (
+        <div style={{
+          background: '#1a2035',
+          border: '1px solid #2d3748',
+          borderRadius: 8,
+          padding: '12px 14px',
+          fontSize: 13,
+          color: '#a0aec0',
+          lineHeight: 1.65,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4a5568', marginBottom: 6 }}>
+            AI Analysis
+          </div>
+          {summary}
+        </div>
+      )}
 
       <p style={{ fontSize: 10, color: '#4a5568', textAlign: 'center', lineHeight: 1.5 }}>
         Not financial advice. Based on public data &amp; quantitative signals only.
