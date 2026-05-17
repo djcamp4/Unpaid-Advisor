@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unpaid Advisor — Stock Analysis</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* NAV */
+    nav {
+      background: #161b27;
+      border-bottom: 1px solid #2d3748;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+    .nav-brand {
+      font-size: 18px;
+      font-weight: 700;
+      color: #63b3ed;
+      letter-spacing: -0.5px;
+    }
+    .nav-brand span { color: #e2e8f0; }
+
+    /* SEARCH BAR */
+    .search-wrap {
+      display: flex;
+      gap: 8px;
+    }
+    .search-wrap input {
+      background: #1e2535;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+      padding: 8px 14px;
+      width: 200px;
+      outline: none;
+      text-transform: uppercase;
+    }
+    .search-wrap input::placeholder { color: #4a5568; text-transform: none; }
+    .search-wrap input:focus { border-color: #63b3ed; }
+    .btn {
+      background: #3182ce;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 18px;
+    }
+    .btn:hover { background: #2b6cb0; }
+
+    /* MAIN LAYOUT */
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 24px;
+      display: grid;
+      gap: 20px;
+    }
+
+    /* TICKER HEADER */
+    .ticker-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .ticker-symbol { font-size: 32px; font-weight: 800; }
+    .ticker-name { font-size: 15px; color: #718096; }
+    .ticker-price { font-size: 32px; font-weight: 700; margin-left: auto; }
+    .price-change { font-size: 15px; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
+    .positive { background: rgba(72,187,120,0.15); color: #48bb78; }
+    .negative { background: rgba(245,101,101,0.15); color: #f56565; }
+
+    /* CARD */
+    .card {
+      background: #161b27;
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 20px 24px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #718096;
+      margin-bottom: 16px;
+    }
+
+    /* GRID LAYOUTS */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+    /* KPI TILES */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .kpi {
+      background: #1a2035;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .kpi-label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .kpi-value { font-size: 22px; font-weight: 700; }
+    .kpi-sub { font-size: 11px; color: #718096; margin-top: 4px; }
+
+    /* CHART */
+    .chart-wrap { position: relative; height: 280px; }
+    .time-btns { display: flex; gap: 6px; margin-bottom: 16px; }
+    .time-btn {
+      background: transparent;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      color: #718096;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+    }
+    .time-btn.active {
+      background: #3182ce;
+      border-color: #3182ce;
+      color: #fff;
+    }
+
+    /* FUNDAMENTALS TABLE */
+    .fund-table { width: 100%; border-collapse: collapse; }
+    .fund-table tr { border-bottom: 1px solid #1e2535; }
+    .fund-table tr:last-child { border-bottom: none; }
+    .fund-table td { padding: 10px 0; font-size: 13px; }
+    .fund-table td:first-child { color: #718096; }
+    .fund-table td:last-child { text-align: right; font-weight: 600; }
+
+    /* SIGNAL BADGE */
+    .signal { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
+    .signal-buy { background: rgba(72,187,120,0.15); color: #48bb78; }
+    .signal-hold { background: rgba(237,137,54,0.15); color: #ed8936; }
+    .signal-sell { background: rgba(245,101,101,0.15); color: #f56565; }
+
+    /* TECHNICAL ROW */
+    .tech-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1e2535; font-size: 13px; }
+    .tech-row:last-child { border-bottom: none; }
+    .tech-label { color: #718096; }
+    .tech-value { font-weight: 600; }
+
+    /* NEWS */
+    .news-item { padding: 12px 0; border-bottom: 1px solid #1e2535; }
+    .news-item:last-child { border-bottom: none; }
+    .news-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .news-meta { font-size: 11px; color: #718096; display: flex; gap: 10px; }
+    .sentiment-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+    .sent-pos { background: rgba(72,187,120,0.15); color: #48bb78; }
+    .sent-neg { background: rgba(245,101,101,0.15); color: #f56565; }
+    .sent-neu { background: rgba(160,174,192,0.15); color: #a0aec0; }
+
+    /* VERDICT CARD */
+    .verdict-card {
+      background: #161b27;
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    .verdict-badge {
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      padding: 12px 36px;
+      border-radius: 14px;
+      width: 100%;
+      text-align: center;
+    }
+    .verdict-buy   { background: rgba(72,187,120,0.15); color: #48bb78; border: 2px solid rgba(72,187,120,0.4); }
+    .verdict-nobuy { background: rgba(245,101,101,0.15); color: #f56565; border: 2px solid rgba(245,101,101,0.4); }
+
+    .confidence-wrap { width: 100%; }
+    .confidence-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #718096;
+      margin-bottom: 8px;
+    }
+    .confidence-label span:last-child { color: #48bb78; font-weight: 700; font-size: 15px; }
+    .confidence-track { width: 100%; height: 10px; background: #1e2535; border-radius: 5px; }
+    .confidence-fill  { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3182ce, #48bb78); }
+
+    .factor-list { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+    .factor-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; border-bottom: 1px solid #1e2535; }
+    .factor-row:last-child { border-bottom: none; }
+    .factor-name { color: #718096; }
+    .factor-score { font-weight: 700; }
+    .f-green { color: #48bb78; }
+    .f-yellow { color: #ed8936; }
+    .f-red { color: #f56565; }
+
+    /* SCORE RING */
+    .score-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 0; }
+    .score-ring { position: relative; width: 110px; height: 110px; }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-ring .track { fill: none; stroke: #1e2535; stroke-width: 10; }
+    .score-ring .fill { fill: none; stroke: #48bb78; stroke-width: 10; stroke-linecap: round; stroke-dasharray: 283; stroke-dashoffset: 70; }
+    .score-number { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .score-number span:first-child { font-size: 26px; font-weight: 800; color: #48bb78; }
+    .score-number span:last-child { font-size: 10px; color: #718096; }
+    .score-label { font-size: 13px; color: #a0aec0; }
+    .score-breakdown { width: 100%; }
+    .score-bar-row { display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 8px; }
+    .score-bar-label { color: #718096; width: 80px; flex-shrink: 0; }
+    .score-bar-track { flex: 1; height: 6px; background: #1e2535; border-radius: 3px; }
+    .score-bar-fill { height: 6px; border-radius: 3px; background: #48bb78; }
+
+    @media (max-width: 900px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">Unpaid<span>Advisor</span></div>
+  <div class="search-wrap">
+    <input type="text" placeholder="Ticker symbol (e.g. AAPL)" value="NVDA" />
+    <button class="btn">Analyze</button>
+  </div>
+</nav>
+
+<main>
+
+  <!-- TICKER HEADER -->
+  <div class="ticker-header">
+    <div class="ticker-symbol">NVDA</div>
+    <div class="ticker-name">NVIDIA Corporation · NASDAQ</div>
+    <div class="ticker-price">$875.40</div>
+    <div class="price-change positive">+3.21 (+0.37%)</div>
+  </div>
+
+  <!-- KPI TILES -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Market Cap</div>
+      <div class="kpi-value">$2.16T</div>
+      <div class="kpi-sub">Mega cap</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">P/E Ratio</div>
+      <div class="kpi-value">67.2×</div>
+      <div class="kpi-sub">vs S&P avg 25×</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">52W Range</div>
+      <div class="kpi-value" style="font-size:16px; padding-top:4px">$460 – $974</div>
+      <div class="kpi-sub">Currently 87th pct</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Avg Volume</div>
+      <div class="kpi-value">42.3M</div>
+      <div class="kpi-sub">Today: 38.1M</div>
+    </div>
+  </div>
+
+  <!-- CHART + SCORE -->
+  <div class="grid-2" style="grid-template-columns: 2fr 1fr;">
+
+    <div class="card">
+      <div class="card-title">Price History</div>
+      <div class="time-btns">
+        <button class="time-btn">1W</button>
+        <button class="time-btn">1M</button>
+        <button class="time-btn active">3M</button>
+        <button class="time-btn">1Y</button>
+        <button class="time-btn">5Y</button>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="verdict-card">
+      <div class="card-title" style="align-self:flex-start">Recommendation</div>
+
+      <div class="verdict-badge verdict-buy">BUY</div>
+
+      <div class="confidence-wrap">
+        <div class="confidence-label">
+          <span>Confidence</span>
+          <span>78%</span>
+        </div>
+        <div class="confidence-track">
+          <div class="confidence-fill" style="width:78%"></div>
+        </div>
+      </div>
+
+      <div class="factor-list">
+        <div class="factor-row">
+          <span class="factor-name">Fundamentals</span>
+          <span class="factor-score f-green">Strong ↑</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Technical Signal</span>
+          <span class="factor-score f-green">Bullish ↑</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">News Sentiment</span>
+          <span class="factor-score f-green">Positive ↑</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Momentum</span>
+          <span class="factor-score f-yellow">Neutral →</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Valuation Risk</span>
+          <span class="factor-score f-red">Elevated ↓</span>
+        </div>
+      </div>
+
+      <p style="font-size:11px; color:#4a5568; text-align:center; line-height:1.5;">
+        Not financial advice. Based on public data &amp; quantitative signals only.
+      </p>
+    </div>
+  </div>
+
+  <!-- FUNDAMENTALS + TECHNICALS -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Fundamentals</div>
+      <table class="fund-table">
+        <tr><td>EPS (TTM)</td><td>$12.96</td></tr>
+        <tr><td>Revenue (TTM)</td><td>$96.3B</td></tr>
+        <tr><td>Revenue Growth (YoY)</td><td style="color:#48bb78">+122%</td></tr>
+        <tr><td>Gross Margin</td><td>74.6%</td></tr>
+        <tr><td>Net Margin</td><td>55.0%</td></tr>
+        <tr><td>Free Cash Flow</td><td>$33.7B</td></tr>
+        <tr><td>Debt / Equity</td><td>0.42</td></tr>
+        <tr><td>Return on Equity</td><td>123.8%</td></tr>
+        <tr><td>Dividend Yield</td><td>0.03%</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Technical Indicators</div>
+      <div class="tech-row">
+        <span class="tech-label">RSI (14)</span>
+        <span class="tech-value">62.4 <span style="font-size:11px;color:#ed8936">Neutral</span></span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">MACD</span>
+        <span class="tech-value" style="color:#48bb78">Bullish crossover</span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">50-day MA</span>
+        <span class="tech-value">$814.20 <span style="font-size:11px;color:#48bb78">↑ Above</span></span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">200-day MA</span>
+        <span class="tech-value">$697.55 <span style="font-size:11px;color:#48bb78">↑ Above</span></span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">Bollinger Bands</span>
+        <span class="tech-value">Mid-range</span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">Volume vs Avg</span>
+        <span class="tech-value" style="color:#f56565">-10% below avg</span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">Support</span>
+        <span class="tech-value">$820.00</span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-label">Resistance</span>
+        <span class="tech-value">$920.00</span>
+      </div>
+      <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
+        <span style="font-size:12px; color:#718096;">Signal:</span>
+        <span class="signal signal-buy">▲ BUY</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEWS SENTIMENT -->
+  <div class="card">
+    <div class="card-title">Recent News &amp; Sentiment</div>
+    <div class="news-item">
+      <div class="news-title">NVIDIA posts record Q4 earnings, data center revenue surges 409% YoY</div>
+      <div class="news-meta">
+        <span>Reuters · 2h ago</span>
+        <span class="sentiment-tag sent-pos">POSITIVE</span>
+      </div>
+    </div>
+    <div class="news-item">
+      <div class="news-title">Analysts raise NVDA price targets following Blackwell GPU demand outlook</div>
+      <div class="news-meta">
+        <span>Bloomberg · 5h ago</span>
+        <span class="sentiment-tag sent-pos">POSITIVE</span>
+      </div>
+    </div>
+    <div class="news-item">
+      <div class="news-title">US export restrictions may limit NVIDIA chip sales to China in 2025</div>
+      <div class="news-meta">
+        <span>WSJ · 1d ago</span>
+        <span class="sentiment-tag sent-neg">NEGATIVE</span>
+      </div>
+    </div>
+    <div class="news-item">
+      <div class="news-title">NVIDIA joins Dow Jones Industrial Average, replacing Intel</div>
+      <div class="news-meta">
+        <span>CNBC · 2d ago</span>
+        <span class="sentiment-tag sent-neu">NEUTRAL</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // Mock price chart
+  const labels = [];
+  const data = [];
+  const base = 720;
+  let price = base;
+  const today = new Date();
+  for (let i = 90; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    price += (Math.random() - 0.45) * 14;
+    price = Math.max(700, Math.min(980, price));
+    data.push(+price.toFixed(2));
+  }
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: '#63b3ed',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: (ctx) => {
+          const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 280);
+          g.addColorStop(0, 'rgba(99,179,237,0.2)');
+          g.addColorStop(1, 'rgba(99,179,237,0)');
+          return g;
+        },
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        mode: 'index', intersect: false,
+        backgroundColor: '#1e2535',
+        borderColor: '#2d3748',
+        borderWidth: 1,
+        titleColor: '#718096',
+        bodyColor: '#e2e8f0',
+        callbacks: { label: ctx => ` $${ctx.parsed.y.toFixed(2)}` }
+      }},
+      scales: {
+        x: { grid: { color: '#1e2535' }, ticks: { color: '#4a5568', maxTicksLimit: 8, font: { size: 11 } } },
+        y: { grid: { color: '#1e2535' }, ticks: { color: '#4a5568', font: { size: 11 }, callback: v => '$' + v } }
+      }
+    }
+  });
+</script>
+</body>
+</html>

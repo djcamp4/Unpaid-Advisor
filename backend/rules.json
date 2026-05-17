@@ -1,0 +1,331 @@
+{
+  "meta": {
+    "title": "Buffett / Graham / Lynch Stock Analysis Rules",
+    "version": "1.0",
+    "sources": ["Warren Buffett", "Benjamin Graham", "Peter Lynch"],
+    "phases": 5,
+    "total_rules": 20,
+    "description": "A combined rule set derived from the investment philosophies of Buffett, Graham, and Lynch. A stock must pass ALL rules before consideration."
+  },
+  "phases": [
+    {
+      "id": 1,
+      "name": "Business Quality Gate",
+      "description": "Qualitative screen — understand the business before touching the numbers.",
+      "gate": true,
+      "rules": [
+        {
+          "id": "BQL-01",
+          "name": "Two-minute explanation test",
+          "source": "Peter Lynch",
+          "type": "qualitative",
+          "question": "Can you explain what this company does and how it makes money in under two minutes?",
+          "pass_condition": "Yes — clear, simple explanation possible",
+          "fail_condition": "No — business is too complex or unclear",
+          "action_on_fail": "REJECT — do not proceed",
+          "notes": "Lynch's cocktail party test. If you cannot explain it simply, you do not understand it well enough to own it."
+        },
+        {
+          "id": "BQL-02",
+          "name": "Durable competitive moat",
+          "source": "Warren Buffett",
+          "type": "qualitative",
+          "question": "Does the company have a durable competitive advantage?",
+          "pass_condition": "Yes — identifiable moat: brand, network effect, switching costs, cost advantage, or regulatory license",
+          "fail_condition": "No moat or moat is deteriorating",
+          "action_on_fail": "REJECT — do not proceed",
+          "notes": "Must be one of the five moat types. 'They are good at what they do' is not a moat."
+        },
+        {
+          "id": "BQL-03",
+          "name": "Management integrity check",
+          "source": "Warren Buffett",
+          "type": "qualitative",
+          "question": "Is management honest, candid about failures, and shareholder-aligned?",
+          "pass_condition": "Yes — candid shareholder letters, low dilution, reasonable compensation",
+          "fail_condition": "Signs of self-dealing, excessive options, or misleading communication",
+          "action_on_fail": "REJECT — do not proceed",
+          "notes": "Read at least 5 years of CEO letters. Look for candor about failures, not just celebration of wins."
+        },
+        {
+          "id": "BQL-04",
+          "name": "Investor domain familiarity",
+          "source": "Peter Lynch",
+          "type": "qualitative",
+          "question": "Is this business in an industry you can follow and understand over time?",
+          "pass_condition": "Yes — you have or can develop genuine knowledge of this sector",
+          "fail_condition": "No — outside your circle of competence with no clear path to understanding",
+          "action_on_fail": "REJECT or defer until sufficient knowledge is gained",
+          "notes": "An edge in understanding the business beats financial cleverness. Invest in what you know."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Financial Health Screen",
+      "description": "Quantitative balance sheet and earnings quality checks — Graham's discipline.",
+      "gate": true,
+      "rules": [
+        {
+          "id": "FHS-01",
+          "name": "Current ratio minimum",
+          "source": "Benjamin Graham",
+          "type": "quantitative",
+          "metric": "Current Ratio",
+          "formula": "Current Assets / Current Liabilities",
+          "threshold": ">= 2.0",
+          "pass_condition": "Current ratio >= 2.0",
+          "fail_condition": "Current ratio < 1.5",
+          "warning_condition": "Current ratio between 1.5 and 2.0",
+          "action_on_fail": "REJECT",
+          "notes": "Graham's minimum for financial safety. Below 1.5 signals potential liquidity risk."
+        },
+        {
+          "id": "FHS-02",
+          "name": "Long-term debt ceiling",
+          "source": "Benjamin Graham",
+          "type": "quantitative",
+          "metric": "Debt to Working Capital Ratio",
+          "formula": "Long-Term Debt / (Current Assets - Current Liabilities)",
+          "threshold": "<= 2.0",
+          "pass_condition": "Long-term debt <= 2x working capital",
+          "fail_condition": "Long-term debt > 2x working capital",
+          "action_on_fail": "REJECT",
+          "notes": "High debt amplifies every business mistake. A company shouldn't be drowning in debt relative to what it controls."
+        },
+        {
+          "id": "FHS-03",
+          "name": "Unbroken earnings record",
+          "source": "Benjamin Graham",
+          "type": "quantitative",
+          "metric": "Annual Earnings Per Share",
+          "formula": "Net Income / Shares Outstanding — check each year",
+          "threshold": "Positive every year for 10 consecutive years",
+          "pass_condition": "No annual loss in 10-year period",
+          "fail_condition": "Any year of negative earnings in 10-year period",
+          "action_on_fail": "REJECT",
+          "notes": "Stability proves the moat is real, not cyclical luck. Source: company 10-K filings or Macrotrends."
+        },
+        {
+          "id": "FHS-04",
+          "name": "Return on equity — sustained",
+          "source": "Warren Buffett",
+          "type": "quantitative",
+          "metric": "Return on Equity (ROE)",
+          "formula": "Net Income / Shareholders Equity",
+          "threshold": ">= 15% for each of the past 5 years",
+          "pass_condition": "ROE >= 15% consistently — not just average",
+          "fail_condition": "ROE < 15% in any of the past 5 years",
+          "action_on_fail": "REJECT",
+          "notes": "Buffett's favorite single metric. A one-time spike does not count. Each year must clear the bar."
+        },
+        {
+          "id": "FHS-05",
+          "name": "Owner earnings positive and growing",
+          "source": "Warren Buffett",
+          "type": "quantitative",
+          "metric": "Owner Earnings",
+          "formula": "Net Income + Depreciation/Amortization - Capital Expenditures",
+          "threshold": "Positive and growing year-over-year",
+          "pass_condition": "Owner earnings positive and trending upward over 5 years",
+          "fail_condition": "Negative owner earnings or declining trend",
+          "action_on_fail": "REJECT",
+          "notes": "This is actual cash generated for owners — more honest than reported net income."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Growth and Story Check",
+      "description": "Is the growth real, understandable, and not yet priced in?",
+      "gate": true,
+      "rules": [
+        {
+          "id": "GSC-01",
+          "name": "PEG ratio target",
+          "source": "Peter Lynch",
+          "type": "quantitative",
+          "metric": "PEG Ratio",
+          "formula": "P/E Ratio / Annual EPS Growth Rate",
+          "threshold": "<= 1.0 (ideal), <= 1.5 (acceptable)",
+          "pass_condition": "PEG <= 1.0",
+          "warning_condition": "PEG between 1.0 and 1.5",
+          "fail_condition": "PEG > 2.0",
+          "action_on_fail": "REJECT or require exceptional justification",
+          "notes": "Lynch's signature metric. PEG < 1 means you may be getting growth cheaply. PEG > 2 means growth is heavily priced in."
+        },
+        {
+          "id": "GSC-02",
+          "name": "Stock category classification",
+          "source": "Peter Lynch",
+          "type": "qualitative",
+          "question": "Which of Lynch's six categories does this stock belong to?",
+          "categories": [
+            "Slow Grower — large, mature, modest growth; value the dividend",
+            "Stalwart — large, steady 10-15% growers; sell at 30-50% gain",
+            "Fast Grower — small, aggressive 20-25% growers; highest reward and risk",
+            "Cyclical — tied to economic cycles; timing of entry is critical",
+            "Turnaround — troubled company with recovery potential; highest risk",
+            "Asset Play — hidden assets not reflected in stock price"
+          ],
+          "pass_condition": "Category clearly identified and investment thesis matches that category's characteristics",
+          "fail_condition": "Cannot categorize or thesis does not match category",
+          "action_on_fail": "Reassess thesis before proceeding",
+          "notes": "Each category requires a different analysis approach and exit strategy."
+        },
+        {
+          "id": "GSC-03",
+          "name": "Remaining opportunity size",
+          "source": "Peter Lynch",
+          "type": "qualitative",
+          "question": "Is there still significant room for the company to grow — is the niche still being filled?",
+          "pass_condition": "Company has < 40% of its total addressable market",
+          "fail_condition": "Company dominates market with little room for expansion",
+          "action_on_fail": "Reassess — most easy gains may already be captured",
+          "notes": "Lynch: when a fast grower already saturates its market, the growth story is over. Find it early."
+        },
+        {
+          "id": "GSC-04",
+          "name": "High-return reinvestment ability",
+          "source": "Warren Buffett",
+          "type": "quantitative",
+          "metric": "Return on Invested Capital (ROIC)",
+          "formula": "Net Operating Profit After Tax / (Total Equity + Total Debt - Cash)",
+          "threshold": ">= 15%",
+          "pass_condition": "ROIC >= 15% and business has opportunities to reinvest at similar rates",
+          "fail_condition": "ROIC < 10% or no clear reinvestment runway",
+          "action_on_fail": "REJECT",
+          "notes": "The best compounders earn well AND can deploy capital back into the business at high rates. This is the engine of long-term wealth."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Valuation and Margin of Safety",
+      "description": "Never overpay — even for a great business. Price determines your return.",
+      "gate": true,
+      "rules": [
+        {
+          "id": "VMS-01",
+          "name": "P/E ratio anchor",
+          "source": "Benjamin Graham",
+          "type": "quantitative",
+          "metric": "Price-to-Earnings Ratio",
+          "formula": "Current Share Price / Trailing 12-Month EPS",
+          "threshold": "<= 15 (Graham's classic ceiling)",
+          "pass_condition": "P/E <= 15",
+          "warning_condition": "P/E between 15 and 20 — requires exceptional quality justification",
+          "fail_condition": "P/E > 25 without extraordinary circumstances",
+          "action_on_fail": "REJECT or wait for better entry price",
+          "notes": "Graham's combined rule: P/E × P/Book should not exceed 22.5. Can be relaxed slightly for high-quality compounders, but use as a starting anchor."
+        },
+        {
+          "id": "VMS-02",
+          "name": "Price-to-book ratio check",
+          "source": "Benjamin Graham",
+          "type": "quantitative",
+          "metric": "Price-to-Book Ratio",
+          "formula": "Market Capitalization / Book Value of Equity",
+          "threshold": "<= 1.5 (Graham's ceiling)",
+          "pass_condition": "P/Book <= 1.5",
+          "warning_condition": "P/Book between 1.5 and 3.0 — only acceptable for very high ROE",
+          "fail_condition": "P/Book > 3.0 for average businesses",
+          "action_on_fail": "REJECT or require high ROE justification",
+          "notes": "Combined with VMS-01: P/E × P/Book <= 22.5 is Graham's combined screen."
+        },
+        {
+          "id": "VMS-03",
+          "name": "Discounted cash flow intrinsic value",
+          "source": "Warren Buffett",
+          "type": "quantitative",
+          "metric": "Intrinsic Value via DCF",
+          "formula": "Sum of (Owner Earnings Year N / (1 + discount_rate)^N) for N = 1 to 10, plus terminal value",
+          "discount_rate": "9-10%",
+          "threshold": "Market cap must be below calculated intrinsic value",
+          "pass_condition": "Current market cap < DCF intrinsic value estimate",
+          "fail_condition": "Current market cap >= DCF intrinsic value estimate",
+          "action_on_fail": "REJECT or wait for price to fall",
+          "notes": "Buffett: it is better to be approximately right than precisely wrong. Use conservative growth assumptions."
+        },
+        {
+          "id": "VMS-04",
+          "name": "Margin of safety minimum",
+          "source": "Benjamin Graham",
+          "type": "quantitative",
+          "metric": "Margin of Safety",
+          "formula": "(Intrinsic Value - Current Price) / Intrinsic Value",
+          "threshold": ">= 25% (minimum), >= 33% (preferred)",
+          "pass_condition": "Current price is at least 25% below intrinsic value estimate",
+          "fail_condition": "Current price is within 15% of or above intrinsic value estimate",
+          "action_on_fail": "REJECT — wait for better price",
+          "notes": "Graham's most important principle. The margin of safety cushions your analytical errors and market volatility. The bigger the better."
+        },
+        {
+          "id": "VMS-05",
+          "name": "Projected annual return gate",
+          "source": "Warren Buffett",
+          "type": "quantitative",
+          "metric": "Expected Annualized Return",
+          "formula": "(Intrinsic Value in Year 10 / Current Price) ^ (1/10) - 1",
+          "threshold": ">= 10% annualized",
+          "pass_condition": "Expected 10-year annualized return >= 10%",
+          "fail_condition": "Expected return < 8% annualized",
+          "action_on_fail": "REJECT — insufficient expected return for the risk taken",
+          "notes": "Buffett: if you wouldn't be happy holding for 10 years, don't hold for 10 minutes. Entry price is everything."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Final Buy Decision and Position Management",
+      "description": "Pulling the trigger intelligently — sizing, documentation, and exit discipline.",
+      "gate": false,
+      "rules": [
+        {
+          "id": "FBD-01",
+          "name": "All prior phases passed with no unsure answers",
+          "source": "All three",
+          "type": "qualitative",
+          "question": "Did all rules in phases 1-4 receive a clear PASS — not 'probably' or 'mostly'?",
+          "pass_condition": "Yes — every rule has a definitive pass",
+          "fail_condition": "Any rule returned a warning, unsure, or partial pass",
+          "action_on_fail": "REJECT — do not invest on partial conviction",
+          "notes": "The system is only as strong as your willingness to walk away. Pretty good on a quality gate is a no."
+        },
+        {
+          "id": "FBD-02",
+          "name": "Written investment thesis required",
+          "source": "Peter Lynch",
+          "type": "qualitative",
+          "question": "Have you written a concise thesis (3-5 sentences) explaining WHY you are buying this stock?",
+          "pass_condition": "Yes — thesis written and includes: what company does, why moat is durable, why price is attractive, and what would change your mind",
+          "fail_condition": "No written thesis, or thesis is vague",
+          "action_on_fail": "Do not buy until thesis is written",
+          "notes": "Lynch: if you can't explain it in a few sentences, you don't know why you're buying. The thesis also defines when to sell."
+        },
+        {
+          "id": "FBD-03",
+          "name": "Position size limit",
+          "source": "All three",
+          "type": "qualitative",
+          "question": "Is your planned position within 5-10% of total portfolio value?",
+          "pass_condition": "Planned position is within 5-10% of total portfolio value",
+          "fail_condition": "Planned position exceeds 10% of portfolio",
+          "action_on_fail": "Reduce position size before buying",
+          "notes": "Conviction is not the same as certainty. Even Buffett's highest-conviction bets were bounded by position size discipline."
+        },
+        {
+          "id": "FBD-04",
+          "name": "Pre-defined sell criteria",
+          "source": "All three",
+          "type": "qualitative",
+          "question": "Before buying, have you written down the specific conditions under which you will sell?",
+          "pass_condition": "Sell criteria documented and includes: thesis break triggers, extreme valuation exit, and rebalancing rules",
+          "fail_condition": "No pre-defined sell criteria",
+          "action_on_fail": "Do not buy until sell criteria are documented",
+          "notes": "Sell when the thesis breaks — not when the price drops. Decide this before emotions are involved."
+        }
+      ]
+    }
+  ]
+}
