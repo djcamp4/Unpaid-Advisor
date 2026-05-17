@@ -61,8 +61,20 @@ def fetch_all(symbol: str) -> dict:
     symbol = symbol.upper().strip()
 
     def _fetch():
-        ticker = yf.Ticker(symbol, session=_session)
-        info = ticker.info or {}
+        last_exc = None
+        for attempt in range(3):
+            try:
+                ticker = yf.Ticker(symbol, session=_session)
+                info = ticker.info or {}
+                if info.get("regularMarketPrice") or info.get("currentPrice"):
+                    break
+            except Exception as e:
+                last_exc = e
+                time.sleep(2 ** attempt)
+        else:
+            if last_exc:
+                raise last_exc
+            raise ValueError(f"Ticker '{symbol}' not found or has no price data.")
 
         if not info.get("regularMarketPrice") and not info.get("currentPrice"):
             raise ValueError(f"Ticker '{symbol}' not found or has no price data.")
