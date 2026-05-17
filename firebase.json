@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "unpaid-advisor",
+    "site": "unpaid-advisor-djc",
     "public": "frontend/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
