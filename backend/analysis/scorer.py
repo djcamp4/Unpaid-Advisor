@@ -285,7 +285,7 @@ def _eval_vms03_04_05(bm: dict, kpis: dict, data: dict, ph_name: str) -> tuple[R
     capex_val = bm["capex"][0] if bm["capex"] else 0
     mc = get_market_cap(data)
     price = get_price(data)
-    shares = kpis.get("shares_outstanding") or (data["info"].get("sharesOutstanding"))
+    shares = kpis.get("shares_outstanding")
 
     fail_dcf = _r("VMS-03", "DCF intrinsic value", "Warren Buffett", 4, ph_name,
                   "FAIL", "N/A", "Mkt cap < intrinsic value", "Could not compute DCF", weight=2.0)
@@ -307,7 +307,7 @@ def _eval_vms03_04_05(bm: dict, kpis: dict, data: dict, ph_name: str) -> tuple[R
         )
 
     # Growth rate: use earnings growth or revenue growth, fallback 5%
-    info = data["info"]
+    info = bm.get("_info_proxy", {})
     eg = float(info.get("earningsGrowth") or 0)
     rg = float(info.get("revenueGrowth") or 0)
     growth_rate = max(min((eg + rg) / 2 if eg and rg else (eg or rg or 0.05), 0.25), 0.0)

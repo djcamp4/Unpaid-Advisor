@@ -47,18 +47,20 @@ def analyze(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scoring failed: {e}")
 
-    info = data["info"]
+    q = data["quote"]
+    p = data["profile"]
     price = get_price(data)
     prev_close = get_prev_close(data)
     change = round(price - prev_close, 2) if price and prev_close else None
     change_pct = round(change / prev_close * 100, 2) if change and prev_close else None
 
+    company_name = p.get("companyName") or q.get("name") or symbol
     kpis = get_kpis(data)
     fundamentals = get_fundamentals(data)
 
     summary = generate_summary(
         symbol=symbol,
-        company_name=info.get("longName") or info.get("shortName", symbol),
+        company_name=company_name,
         verdict=score_data["verdict"],
         confidence=score_data["confidence"],
         factors=score_data["factors"],
@@ -69,10 +71,10 @@ def analyze(symbol: str):
 
     return {
         "symbol": symbol,
-        "company_name": info.get("longName") or info.get("shortName", symbol),
-        "exchange": info.get("exchange", ""),
-        "sector": info.get("sector", ""),
-        "industry": info.get("industry", ""),
+        "company_name": company_name,
+        "exchange": p.get("exchangeShortName", ""),
+        "sector": p.get("sector", ""),
+        "industry": p.get("industry", ""),
         "price": price,
         "prev_close": prev_close,
         "change": change,

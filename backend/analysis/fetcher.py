@@ -1,22 +1,19 @@
+import os
 import time
 import requests as _requests
-import yfinance as yf
 import pandas as pd
 import numpy as np
 
-_session = _requests.Session()
-_session.headers.update({
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-})
+_FMP_KEY = os.environ.get("FMP_API_KEY", "S50WQYCaOtXcM5m9Kt9b3aRZWcJ5aoxz")
+_FMP_BASE = "https://financialmodelingprep.com/api/v3"
 
 _cache: dict = {}
 CACHE_TTL = 3600  # 1 hour
+
+_session = _requests.Session()
+_session.headers.update({
+    "User-Agent": "UnpaidAdvisor/1.0",
+})
 
 
 def _cached(key: str, fn):
@@ -28,13 +25,16 @@ def _cached(key: str, fn):
     return result
 
 
-def _safe_row(df: pd.DataFrame, candidates: list[str]) -> pd.Series | None:
-    if df is None or df.empty:
+def _get(endpoint: str, params: dict = None) -> dict | list | None:
+    p = {"apikey": _FMP_KEY}
+    if params:
+        p.update(params)
+    try:
+        r = _session.get(f"{_FMP_BASE}/{endpoint}", params=p, timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
         return None
-    for name in candidates:
-        if name in df.index:
-            return df.loc[name]
-    return None
 
 
 def _to_float(val) -> float | None:
@@ -61,123 +61,160 @@ def fetch_all(symbol: str) -> dict:
     symbol = symbol.upper().strip()
 
     def _fetch():
-        last_exc = None
-        for attempt in range(3):
-            try:
-                ticker = yf.Ticker(symbol, session=_session)
-                info = ticker.info or {}
-                if info.get("regularMarketPrice") or info.get("currentPrice"):
-                    break
-            except Exception as e:
-                last_exc = e
-                time.sleep(2 ** attempt)
-        else:
-            if last_exc:
-                raise last_exc
+        quote = _get(f"quote/{symbol}")
+        if not quote or not isinstance(quote, list) or not quote[0].get("price"):
             raise ValueError(f"Ticker '{symbol}' not found or has no price data.")
+        q = quote[0]
 
-        if not info.get("regularMarketPrice") and not info.get("currentPrice"):
-            raise ValueError(f"Ticker '{symbol}' not found or has no price data.")
+        profile = _get(f"profile/{symbol}")
+        p = profile[0] if profile and isinstance(profile, list) else {}
 
-        income = _get_df(ticker, ["income_stmt", "financials"])
-        balance = _get_df(ticker, ["balance_sheet"])
-        cashflow = _get_df(ticker, ["cash_flow", "cashflow"])
+        metrics = _get(f"key-metrics-ttm/{symbol}")
+        m = metrics[0] if metrics and isinstance(metrics, list) else {}
 
-        hist_daily = ticker.history(period="1y")
-        hist_weekly = ticker.history(period="5y", interval="1wk")
-        news_raw = ticker.news or []
+        ratios = _get(f"ratios-ttm/{symbol}")
+        r = ratios[0] if ratios and isinstance(ratios, list) else {}
+
+        income = _get(f"income-statement/{symbol}", {"limit": 5})
+        balance = _get(f"balance-sheet-statement/{symbol}", {"limit": 5})
+        cashflow = _get(f"cash-flow-statement/{symbol}", {"limit": 5})
+
+        hist_daily = _get(f"historical-price-full/{symbol}", {"timeseries": 365})
+        hist_weekly = _get(f"historical-price-full/{symbol}", {
+            "timeseries": 1825, "seriestype": "weekly"
+        })
+
+        news = _get(f"stock_news", {"tickers": symbol, "limit": 8})
 
         return {
             "symbol": symbol,
-            "info": info,
-            "income": income,
-            "balance": balance,
-            "cashflow": cashflow,
+            "quote": q,
+            "profile": p,
+            "metrics": m,
+            "ratios": r,
+            "income": income or [],
+            "balance": balance or [],
+            "cashflow": cashflow or [],
             "hist_daily": hist_daily,
             "hist_weekly": hist_weekly,
-            "news_raw": news_raw,
+            "news_raw": news or [],
         }
 
     return _cached(symbol, _fetch)
 
 
-def _get_df(ticker, attrs: list[str]) -> pd.DataFrame | None:
-    for attr in attrs:
-        try:
-            df = getattr(ticker, attr, None)
-            if df is not None and not df.empty:
-                return df
-        except Exception:
-            pass
-    return None
-
-
-# ── Public helpers used by scorer ─────────────────────────────────────────────
+# ── Public helpers ─────────────────────────────────────────────────────────────
 
 def get_price(data: dict) -> float | None:
-    info = data["info"]
-    return _to_float(info.get("currentPrice") or info.get("regularMarketPrice"))
+    return _to_float(data["quote"].get("price"))
 
 
 def get_prev_close(data: dict) -> float | None:
-    return _to_float(data["info"].get("previousClose"))
+    return _to_float(data["quote"].get("previousClose"))
 
 
 def get_market_cap(data: dict) -> float | None:
-    return _to_float(data["info"].get("marketCap"))
+    return _to_float(data["quote"].get("marketCap"))
 
 
 def get_kpis(data: dict) -> dict:
-    info = data["info"]
+    q = data["quote"]
+    m = data["metrics"]
+    r = data["ratios"]
     mc = get_market_cap(data)
     return {
         "market_cap": mc,
         "market_cap_fmt": _fmt_large(mc),
-        "pe_ratio": _to_float(info.get("trailingPE")),
-        "forward_pe": _to_float(info.get("forwardPE")),
-        "peg_ratio": _to_float(info.get("pegRatio")),
-        "price_to_book": _to_float(info.get("priceToBook")),
-        "week_52_high": _to_float(info.get("fiftyTwoWeekHigh")),
-        "week_52_low": _to_float(info.get("fiftyTwoWeekLow")),
-        "volume": _to_float(info.get("volume")),
-        "avg_volume": _to_float(info.get("averageVolume")),
-        "dividend_yield": _to_float(info.get("dividendYield")),
-        "beta": _to_float(info.get("beta")),
-        "eps_ttm": _to_float(info.get("trailingEps")),
-        "forward_eps": _to_float(info.get("forwardEps")),
+        "pe_ratio": _to_float(q.get("pe")),
+        "forward_pe": _to_float(m.get("forwardPERatioTTM")),
+        "peg_ratio": _to_float(m.get("pegRatioTTM")),
+        "price_to_book": _to_float(m.get("priceToBookRatioTTM")),
+        "week_52_high": _to_float(q.get("yearHigh")),
+        "week_52_low": _to_float(q.get("yearLow")),
+        "volume": _to_float(q.get("volume")),
+        "avg_volume": _to_float(q.get("avgVolume")),
+        "dividend_yield": _to_float(m.get("dividendYieldTTM")),
+        "beta": _to_float(q.get("beta")),
+        "eps_ttm": _to_float(q.get("eps")),
+        "forward_eps": _to_float(m.get("forwardEPSTTM") or r.get("epsGrowthTTM")),
+        "shares_outstanding": _to_float(q.get("sharesOutstanding")),
     }
 
 
 def get_fundamentals(data: dict) -> dict:
-    info = data["info"]
-    income = data["income"]
-    cashflow = data["cashflow"]
-
-    rev = _to_float(info.get("totalRevenue"))
-    fcf = _to_float(info.get("freeCashflow"))
-
-    rev_growth = _to_float(info.get("revenueGrowth"))
-    earnings_growth = _to_float(info.get("earningsGrowth"))
-
+    q = data["quote"]
+    m = data["metrics"]
+    r = data["ratios"]
+    inc = data["income"][0] if data["income"] else {}
+    rev = _to_float(inc.get("revenue"))
+    fcf = _to_float(m.get("freeCashFlowPerShareTTM"))
     return {
-        "eps_ttm": _to_float(info.get("trailingEps")),
+        "eps_ttm": _to_float(q.get("eps")),
         "revenue_ttm": rev,
         "revenue_ttm_fmt": _fmt_large(rev),
-        "revenue_growth_yoy": rev_growth,
-        "gross_margin": _to_float(info.get("grossMargins")),
-        "operating_margin": _to_float(info.get("operatingMargins")),
-        "net_margin": _to_float(info.get("profitMargins")),
+        "revenue_growth_yoy": _to_float(r.get("revenueGrowthTTM")),
+        "gross_margin": _to_float(r.get("grossProfitMarginTTM")),
+        "operating_margin": _to_float(r.get("operatingProfitMarginTTM")),
+        "net_margin": _to_float(r.get("netProfitMarginTTM")),
+        "profit_margin": _to_float(r.get("netProfitMarginTTM")),
         "free_cash_flow": fcf,
         "free_cash_flow_fmt": _fmt_large(fcf),
-        "debt_to_equity": _to_float(info.get("debtToEquity")),
-        "roe": _to_float(info.get("returnOnEquity")),
-        "roa": _to_float(info.get("returnOnAssets")),
-        "earnings_growth": earnings_growth,
-        "dividend_yield": _to_float(info.get("dividendYield")),
-        "shares_outstanding": _to_float(info.get("sharesOutstanding")),
-        "book_value": _to_float(info.get("bookValue")),
+        "debt_to_equity": _to_float(r.get("debtEquityRatioTTM")),
+        "roe": _to_float(r.get("returnOnEquityTTM")),
+        "roa": _to_float(r.get("returnOnAssetsTTM")),
+        "earnings_growth": _to_float(r.get("epsGrowthTTM")),
+        "dividend_yield": _to_float(m.get("dividendYieldTTM")),
+        "shares_outstanding": _to_float(q.get("sharesOutstanding")),
+        "book_value": _to_float(m.get("bookValuePerShareTTM")),
     }
 
+
+def get_balance_sheet_metrics(data: dict) -> dict:
+    bal = data["balance"]
+    inc = data["income"]
+    cf = data["cashflow"]
+    q = data["quote"]
+    r = data["ratios"]
+
+    def _col(rows, key):
+        return [_to_float(row.get(key)) for row in rows if row.get(key) is not None]
+
+    current_assets = _col(bal, "totalCurrentAssets")
+    current_liabilities = _col(bal, "totalCurrentLiabilities")
+    long_term_debt = _col(bal, "longTermDebt")
+    equity = _col(bal, "totalStockholdersEquity")
+    net_income = _col(inc, "netIncome")
+    da = _col(cf, "depreciationAndAmortization")
+    capex = _col(cf, "capitalExpenditure")
+    op_income = _col(inc, "operatingIncome")
+    total_debt = _col(bal, "totalDebt")
+    cash = _col(bal, "cashAndCashEquivalents")
+
+    tax_rate = _to_float(r.get("effectiveTaxRateTTM")) or 0.21
+
+    info_proxy = {
+        "earningsGrowth": r.get("epsGrowthTTM"),
+        "revenueGrowth": r.get("revenueGrowthTTM"),
+        "sharesOutstanding": q.get("sharesOutstanding"),
+    }
+
+    return {
+        "current_assets": current_assets,
+        "current_liabilities": current_liabilities,
+        "long_term_debt": long_term_debt,
+        "equity": equity,
+        "net_income": net_income,
+        "da": da,
+        "capex": capex,
+        "op_income": op_income,
+        "total_debt": total_debt,
+        "cash": cash,
+        "tax_rate": tax_rate,
+        "_info_proxy": info_proxy,
+    }
+
+
+# ── Technical indicators (manual, no pandas-ta) ────────────────────────────────
 
 def _rsi(close: pd.Series, length: int = 14) -> float | None:
     delta = close.diff()
@@ -215,8 +252,24 @@ def _sma(close: pd.Series, length: int) -> float | None:
     return None if pd.isna(val) else float(val)
 
 
+def _parse_hist(raw) -> pd.DataFrame | None:
+    if not raw or "historical" not in raw:
+        return None
+    rows = raw["historical"]
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+    df.rename(columns={
+        "open": "Open", "high": "High", "low": "Low",
+        "close": "Close", "volume": "Volume",
+    }, inplace=True)
+    return df
+
+
 def get_technicals(data: dict) -> dict:
-    hist = data["hist_daily"]
+    hist = _parse_hist(data.get("hist_daily"))
     if hist is None or hist.empty:
         return {}
 
@@ -268,14 +321,15 @@ def get_technicals(data: dict) -> dict:
 
 
 def get_history(data: dict) -> dict:
-    def _serialize(hist: pd.DataFrame) -> list[dict]:
-        if hist is None or hist.empty:
+    def _serialize(raw) -> list[dict]:
+        df = _parse_hist(raw)
+        if df is None or df.empty:
             return []
         out = []
-        for ts, row in hist.iterrows():
+        for _, row in df.iterrows():
             try:
                 out.append({
-                    "date": ts.strftime("%Y-%m-%d"),
+                    "date": row["date"].strftime("%Y-%m-%d"),
                     "open": round(float(row["Open"]), 2),
                     "high": round(float(row["High"]), 2),
                     "low": round(float(row["Low"]), 2),
@@ -287,8 +341,8 @@ def get_history(data: dict) -> dict:
         return out
 
     return {
-        "daily": _serialize(data["hist_daily"]),
-        "weekly": _serialize(data["hist_weekly"]),
+        "daily": _serialize(data.get("hist_daily")),
+        "weekly": _serialize(data.get("hist_weekly")),
     }
 
 
@@ -302,70 +356,25 @@ def _sentiment(title: str) -> str:
     words = set(title.lower().split())
     pos = len(words & POSITIVE_WORDS)
     neg = len(words & NEGATIVE_WORDS)
-    if pos > neg:
-        return "positive"
-    if neg > pos:
-        return "negative"
-    return "neutral"
+    return "positive" if pos > neg else "negative" if neg > pos else "neutral"
 
 
 def get_news(data: dict) -> list[dict]:
     out = []
     for item in (data["news_raw"] or [])[:8]:
         try:
-            content = item.get("content", {})
-            title = content.get("title", "") or item.get("title", "")
-            publisher = content.get("provider", {}).get("displayName", "") or item.get("publisher", "")
-            pub_date = content.get("pubDate", "") or ""
-            url = content.get("canonicalUrl", {}).get("url", "") or item.get("link", "")
+            title = item.get("title", "")
+            publisher = item.get("site", "")
+            pub_date = item.get("publishedDate", "")[:10]
+            url = item.get("url", "")
             if title:
                 out.append({
                     "title": title,
                     "publisher": publisher,
-                    "published_at": pub_date[:10] if pub_date else "",
+                    "published_at": pub_date,
                     "url": url,
                     "sentiment": _sentiment(title),
                 })
         except Exception:
             pass
     return out
-
-
-def get_balance_sheet_metrics(data: dict) -> dict:
-    balance = data["balance"]
-    income = data["income"]
-    cashflow = data["cashflow"]
-    info = data["info"]
-
-    ca = _safe_row(balance, ["Current Assets", "TotalCurrentAssets"])
-    cl = _safe_row(balance, ["Current Liabilities", "TotalCurrentLiabilities"])
-    ltd = _safe_row(balance, ["Long Term Debt", "LongTermDebt", "Long-Term Debt"])
-    equity = _safe_row(balance, ["Stockholders Equity", "Total Stockholder Equity",
-                                  "StockholdersEquity", "CommonStockEquity"])
-    net_income = _safe_row(income, ["Net Income", "NetIncome"])
-    da = _safe_row(cashflow, ["Depreciation And Amortization", "DepreciationAndAmortization",
-                               "Reconciled Depreciation", "Depreciation"])
-    capex = _safe_row(cashflow, ["Capital Expenditure", "CapitalExpenditure",
-                                  "Capital Expenditures", "CapEx"])
-    op_income = _safe_row(income, ["Operating Income", "OperatingIncome", "EBIT"])
-    total_debt = _safe_row(balance, ["Total Debt", "TotalDebt"])
-    cash = _safe_row(balance, ["Cash And Cash Equivalents", "Cash", "CashAndCashEquivalents"])
-
-    def _series_to_list(s) -> list[float | None]:
-        if s is None:
-            return []
-        return [_to_float(v) for v in s.values]
-
-    return {
-        "current_assets": _series_to_list(ca),
-        "current_liabilities": _series_to_list(cl),
-        "long_term_debt": _series_to_list(ltd),
-        "equity": _series_to_list(equity),
-        "net_income": _series_to_list(net_income),
-        "da": _series_to_list(da),
-        "capex": _series_to_list(capex),
-        "op_income": _series_to_list(op_income),
-        "total_debt": _series_to_list(total_debt),
-        "cash": _series_to_list(cash),
-        "tax_rate": _to_float(info.get("effectiveTaxRate")) or 0.21,
-    }
