@@ -1,7 +1,19 @@
 import time
+import requests as _requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
+
+_session = _requests.Session()
+_session.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+})
 
 _cache: dict = {}
 CACHE_TTL = 3600  # 1 hour
@@ -49,7 +61,7 @@ def fetch_all(symbol: str) -> dict:
     symbol = symbol.upper().strip()
 
     def _fetch():
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(symbol, session=_session)
         info = ticker.info or {}
 
         if not info.get("regularMarketPrice") and not info.get("currentPrice"):
