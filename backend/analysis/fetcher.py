@@ -1,7 +1,6 @@
 import time
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta
 import numpy as np
 
 _cache: dict = {}
@@ -156,6 +155,42 @@ def get_fundamentals(data: dict) -> dict:
     }
 
 
+def _rsi(close: pd.Series, length: int = 14) -> float | None:
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(com=length - 1, adjust=False).mean()
+    avg_loss = loss.ewm(com=length - 1, adjust=False).mean()
+    rs = avg_gain / avg_loss
+    val = (100 - (100 / (1 + rs))).iloc[-1]
+    return None if pd.isna(val) else float(val)
+
+
+def _macd(close: pd.Series):
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    m = macd_line.iloc[-1]
+    s = signal_line.iloc[-1]
+    if pd.isna(m) or pd.isna(s):
+        return None
+    return bool(m > s)
+
+
+def _bbands(close: pd.Series, length: int = 20, std: float = 2.0):
+    sma = close.rolling(length).mean()
+    dev = close.rolling(length).std()
+    upper = (sma + std * dev).iloc[-1]
+    lower = (sma - std * dev).iloc[-1]
+    return (None, None) if pd.isna(upper) or pd.isna(lower) else (float(upper), float(lower))
+
+
+def _sma(close: pd.Series, length: int) -> float | None:
+    val = close.rolling(length).mean().iloc[-1]
+    return None if pd.isna(val) else float(val)
+
+
 def get_technicals(data: dict) -> dict:
     hist = data["hist_daily"]
     if hist is None or hist.empty:
@@ -163,73 +198,34 @@ def get_technicals(data: dict) -> dict:
 
     close = hist["Close"]
     volume = hist["Volume"]
-
-    hist.ta.rsi(length=14, append=True)
-    hist.ta.macd(fast=12, slow=26, signal=9, append=True)
-    hist.ta.bbands(length=20, std=2, append=True)
-    hist.ta.sma(length=50, append=True)
-    hist.ta.sma(length=200, append=True)
-
     price = float(close.iloc[-1])
 
-    rsi_col = next((c for c in hist.columns if c.startswith("RSI_")), None)
-    rsi = float(hist[rsi_col].iloc[-1]) if rsi_col and not pd.isna(hist[rsi_col].iloc[-1]) else None
+    rsi = _rsi(close)
+    macd_bullish = _macd(close)
+    sma50 = _sma(close, 50)
+    sma200 = _sma(close, 200)
+    bb_upper, bb_lower = _bbands(close)
 
-    macd_col = next((c for c in hist.columns if c.startswith("MACD_") and "h" not in c.lower() and "s" not in c.lower()), None)
-    macd_sig_col = next((c for c in hist.columns if c.startswith("MACDs_")), None)
-    macd_bullish = None
-    if macd_col and macd_sig_col:
-        try:
-            m = float(hist[macd_col].iloc[-1])
-            s = float(hist[macd_sig_col].iloc[-1])
-            macd_bullish = m > s
-        except Exception:
-            pass
-
-    sma50_col = next((c for c in hist.columns if "SMA_50" in c), None)
-    sma200_col = next((c for c in hist.columns if "SMA_200" in c), None)
-    sma50 = float(hist[sma50_col].iloc[-1]) if sma50_col and not pd.isna(hist[sma50_col].iloc[-1]) else None
-    sma200 = float(hist[sma200_col].iloc[-1]) if sma200_col and not pd.isna(hist[sma200_col].iloc[-1]) else None
-
-    bb_upper_col = next((c for c in hist.columns if c.startswith("BBU_")), None)
-    bb_lower_col = next((c for c in hist.columns if c.startswith("BBL_")), None)
     bb_position = None
-    if bb_upper_col and bb_lower_col:
-        try:
-            bb_upper = float(hist[bb_upper_col].iloc[-1])
-            bb_lower = float(hist[bb_lower_col].iloc[-1])
-            pct = (price - bb_lower) / (bb_upper - bb_lower) if bb_upper != bb_lower else 0.5
-            if pct > 0.8:
-                bb_position = "upper"
-            elif pct < 0.2:
-                bb_position = "lower"
-            else:
-                bb_position = "mid"
-        except Exception:
-            pass
+    if bb_upper is not None and bb_lower is not None and bb_upper != bb_lower:
+        pct = (price - bb_lower) / (bb_upper - bb_lower)
+        bb_position = "upper" if pct > 0.8 else "lower" if pct < 0.2 else "mid"
 
     avg_vol = float(volume.mean())
     cur_vol = float(volume.iloc[-1])
     vol_vs_avg = (cur_vol - avg_vol) / avg_vol if avg_vol else None
 
-    # Simple support/resistance: recent 20-day low/high
     recent = close.tail(20)
     support = float(recent.min())
     resistance = float(recent.max())
 
-    # Technical signal
     bullish_signals = sum([
         rsi is not None and 40 < rsi < 70,
         macd_bullish is True,
         sma50 is not None and price > sma50,
         sma200 is not None and price > sma200,
     ])
-    if bullish_signals >= 3:
-        signal = "BUY"
-    elif bullish_signals <= 1:
-        signal = "SELL"
-    else:
-        signal = "HOLD"
+    signal = "BUY" if bullish_signals >= 3 else "SELL" if bullish_signals <= 1 else "HOLD"
 
     return {
         "rsi": rsi,
