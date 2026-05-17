@@ -43,7 +43,7 @@ steps:
       - -c
       - |
         cd frontend
-        npm ci
+        npm install
         VITE_API_URL=$$VITE_API_URL npm run build
     secretEnv: ['VITE_API_URL']
     id: frontend-build
