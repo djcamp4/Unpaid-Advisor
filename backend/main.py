@@ -73,6 +73,10 @@ def analyze(symbol: str):
         fundamentals=fundamentals,
     )
 
+    # Judge's verdict and confidence override the rule engine when available
+    verdict    = debate["verdict"]    if debate else score_data["verdict"]
+    confidence = debate["confidence"] if debate else score_data["confidence"]
+
     return {
         "symbol": symbol,
         "company_name": company_name,
@@ -90,4 +94,6 @@ def analyze(symbol: str):
         "news": get_news(data),
         "debate": debate,
         **score_data,
+        "verdict": verdict,
+        "confidence": confidence,
     }

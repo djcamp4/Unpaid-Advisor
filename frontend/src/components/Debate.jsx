@@ -8,7 +8,7 @@ function decisionStyle(d) {
   return DECISION_STYLE[d] || DECISION_STYLE['HOLD']
 }
 
-function AgentCard({ label, icon, subtitle, caseText, decision, accentColor }) {
+function AgentCard({ label, icon, caseText, decision, accentColor }) {
   const ds = decisionStyle(decision)
   return (
     <div style={{
@@ -23,11 +23,8 @@ function AgentCard({ label, icon, subtitle, caseText, decision, accentColor }) {
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 16 }}>{icon}</span>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: accentColor }}>
-            {label}
-          </div>
-          <div style={{ fontSize: 11, color: '#4a5568' }}>{subtitle}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: accentColor }}>
+          {label}
         </div>
         <div style={{
           marginLeft: 'auto',
@@ -72,7 +69,6 @@ export default function Debate({ debate }) {
         <AgentCard
           label="Growth Investor"
           icon="🚀"
-          subtitle="Momentum · TAM · Future earnings"
           caseText={growth.case}
           decision={growth.decision}
           accentColor="#9f7aea"
@@ -80,7 +76,6 @@ export default function Debate({ debate }) {
         <AgentCard
           label="Value Investor"
           icon="📊"
-          subtitle="Buffett · Graham · Lynch"
           caseText={value.case}
           decision={value.decision}
           accentColor="#63b3ed"

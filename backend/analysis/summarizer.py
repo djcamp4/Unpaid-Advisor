@@ -1,12 +1,13 @@
 """
-Three-step AI analysis via OpenRouter:
+Three-agent investment analysis via OpenRouter:
   1. Value agent  — Buffett/Graham/Lynch perspective + decision
   2. Growth agent — Aggressive growth perspective + decision (reads value case)
-  3. Summary      — 3-5 sentence plain-English synthesis informed by both
+  3. Judge        — Weighs both, produces final verdict, confidence %, and summary
 Returns None gracefully if API key is missing or any call fails.
 """
 
 import os
+import re
 import requests
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -39,10 +40,19 @@ def _extract_decision(text: str, tag: str) -> str:
     return "HOLD"
 
 
-def _clean(text: str, tag: str) -> str:
-    """Remove the trailing decision line from agent output."""
-    import re
-    return re.sub(rf"{tag}.*$", "", text, flags=re.IGNORECASE | re.MULTILINE).strip()
+def _extract_confidence(text: str) -> float:
+    for line in text.upper().splitlines():
+        if "CONFIDENCE:" in line:
+            m = re.search(r'(\d+)', line)
+            if m:
+                return min(float(m.group(1)), 100.0)
+    return 50.0
+
+
+def _clean(text: str, *tags) -> str:
+    for tag in tags:
+        text = re.sub(rf"{tag}.*$", "", text, flags=re.IGNORECASE | re.MULTILINE)
+    return text.strip()
 
 
 def _data_block(symbol, company_name, verdict, confidence, factors,
@@ -56,7 +66,7 @@ def _data_block(symbol, company_name, verdict, confidence, factors,
 
     return "\n".join([
         f"Stock: {symbol} ({company_name})",
-        f"Quantitative verdict: {verdict} at {confidence}% confidence",
+        f"Quantitative rule score: {verdict} at {confidence}% confidence",
         f"Factor scores — Fundamentals: {factors['fundamentals']['score']}%  "
         f"Growth: {factors['growth']['score']}%  "
         f"Valuation: {factors['valuation']['score']}%  "
@@ -102,9 +112,8 @@ def generate_debate(
                 "Benjamin Graham, and Peter Lynch. You prioritize margin of safety, durable "
                 "competitive advantages, consistent earnings, low debt, and reasonable valuations. "
                 "You are skeptical of hype and growth-at-any-price thinking. "
-                "Write 2-3 focused paragraphs analyzing this stock, referencing specific numbers "
-                "from the rule results and metrics provided. "
-                "End your response with exactly one line in this format: DECISION: BUY or DECISION: HOLD or DECISION: DON'T BUY"
+                "Write 2-3 focused paragraphs analyzing this stock, referencing specific numbers. "
+                "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
         {"role": "user", "content": f"Analyze this stock from a value investing perspective:\n\n{data}"},
@@ -126,7 +135,7 @@ def generate_debate(
                 "You've read the value investor's take — engage with their specific points "
                 "where you agree or disagree, and make your own case. "
                 "Write 2-3 focused paragraphs referencing specific numbers. "
-                "End your response with exactly one line in this format: DECISION: BUY or DECISION: HOLD or DECISION: DON'T BUY"
+                "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
         {
@@ -144,32 +153,47 @@ def generate_debate(
     growth_decision = _extract_decision(growth_raw, "DECISION:")
     growth_case = _clean(growth_raw, "DECISION:")
 
-    # ── Agent 3: Plain-English summary informed by both ───────────────────────
-    summary_raw = _call([
+    # ── Agent 3: Judge — produces the final verdict and confidence ────────────
+    judge_raw = _call([
         {
             "role": "system",
             "content": (
-                "You are a financial writer summarizing an investment analysis. "
-                "Write 3-5 plain-English sentences that capture the most important takeaways "
-                "about this stock, informed by both a value investor's perspective and a "
-                "growth investor's perspective. Be direct, specific, and reference key numbers. "
-                "Do not use bullet points. Do not recommend buying or selling. "
-                "Just give an honest, balanced summary an investor can use."
+                "You are a senior investment analyst and the final decision-maker. "
+                "A value investor and a growth investor have both made their cases. "
+                "Weigh their arguments carefully — neither perspective automatically wins. "
+                "Produce:\n"
+                "1. A 3-5 sentence plain-English summary of the key takeaways for an investor.\n"
+                "2. A confidence score (0-100%) reflecting how clear-cut the decision is — "
+                "high confidence means the evidence strongly points one way; "
+                "low confidence means the two cases are evenly matched.\n"
+                "3. A final verdict.\n\n"
+                "End your response with exactly these two lines (no other text after them):\n"
+                "CONFIDENCE: XX%\n"
+                "FINAL VERDICT: BUY  or  FINAL VERDICT: HOLD  or  FINAL VERDICT: DON'T BUY"
             ),
         },
         {
             "role": "user",
             "content": (
                 f"Stock: {symbol} ({company_name})\n\n"
-                f"Value investor's analysis:\n{value_case}\n\n"
-                f"Growth investor's analysis:\n{growth_case}\n\n"
-                "Write a 3-5 sentence plain-English summary of the key points."
+                f"VALUE INVESTOR ({value_decision}):\n{value_case}\n\n"
+                f"GROWTH INVESTOR ({growth_decision}):\n{growth_case}\n\n"
+                "Weigh both cases and deliver your verdict."
             ),
         },
-    ], api_key, max_tokens=300)
+    ], api_key, max_tokens=400)
+
+    if not judge_raw:
+        return None
+
+    final_verdict = _extract_decision(judge_raw, "FINAL VERDICT:")
+    final_confidence = _extract_confidence(judge_raw)
+    summary = _clean(judge_raw, "CONFIDENCE:", "FINAL VERDICT:")
 
     return {
-        "summary": summary_raw,
+        "verdict":    final_verdict,
+        "confidence": final_confidence,
+        "summary":    summary,
         "value":  {"case": value_case,  "decision": value_decision},
         "growth": {"case": growth_case, "decision": growth_decision},
     }
