@@ -112,12 +112,12 @@ def generate_debate(
                 "Benjamin Graham, and Peter Lynch. You prioritize margin of safety, durable "
                 "competitive advantages, consistent earnings, low debt, and reasonable valuations. "
                 "You are skeptical of hype and growth-at-any-price thinking. "
-                "Write 2-3 focused paragraphs analyzing this stock, referencing specific numbers. "
+                "Write exactly 2 paragraphs, around 80-100 words total. Be direct and specific. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
         {"role": "user", "content": f"Analyze this stock from a value investing perspective:\n\n{data}"},
-    ], api_key, max_tokens=480)
+    ], api_key, max_tokens=200)
 
     if not value_raw:
         return None
@@ -134,7 +134,7 @@ def generate_debate(
                 "You believe the biggest risk is missing a transformational company. "
                 "You've read the value investor's take — engage with their specific points "
                 "where you agree or disagree, and make your own case. "
-                "Write 2-3 focused paragraphs referencing specific numbers. "
+                "Write exactly 2 paragraphs, around 80-100 words total. Be direct and specific. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
@@ -146,7 +146,7 @@ def generate_debate(
                 "Now give your growth investing perspective, responding to their points."
             ),
         },
-    ], api_key, max_tokens=480)
+    ], api_key, max_tokens=200)
 
     if not growth_raw:
         return None
