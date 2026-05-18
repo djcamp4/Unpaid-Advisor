@@ -132,7 +132,7 @@ export default function App() {
 
         {loading && (
           <div style={styles.spinner}>
-            Fetching data and running Buffett / Graham / Lynch rules…
+            Processing…
           </div>
         )}
 

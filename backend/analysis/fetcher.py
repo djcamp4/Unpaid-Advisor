@@ -119,21 +119,23 @@ def get_market_cap(data: dict) -> float | None:
 def get_kpis(data: dict) -> dict:
     q = data["quote"]
     m = data["metrics"]
+    r = data["ratios"]
+    p = data["profile"]
     mc = get_market_cap(data)
     return {
         "market_cap": mc,
         "market_cap_fmt": _fmt_large(mc),
-        "pe_ratio": _to_float(m.get("peRatioTTM")),
-        "forward_pe": _to_float(m.get("forwardPETTM")),
-        "peg_ratio": _to_float(m.get("pegRatioTTM")),
-        "price_to_book": _to_float(m.get("pbRatioTTM")),
+        "pe_ratio": _to_float(r.get("priceToEarningsRatioTTM")),
+        "forward_pe": _to_float(r.get("forwardPriceToEarningsGrowthRatioTTM")),
+        "peg_ratio": _to_float(r.get("priceToEarningsGrowthRatioTTM")),
+        "price_to_book": _to_float(r.get("priceToBookRatioTTM")),
         "week_52_high": _to_float(q.get("yearHigh")),
         "week_52_low": _to_float(q.get("yearLow")),
         "volume": _to_float(q.get("volume")),
         "avg_volume": _to_float(q.get("avgVolume")),
-        "dividend_yield": _to_float(m.get("dividendYieldTTM")),
-        "beta": _to_float(m.get("betaTTM")),
-        "eps_ttm": _to_float(m.get("epsTTM")),
+        "dividend_yield": _to_float(r.get("dividendYieldTTM")),
+        "beta": _to_float(p.get("beta")),
+        "eps_ttm": _to_float(r.get("netIncomePerShareTTM")),
         "shares_outstanding": _to_float(m.get("weightedAverageSharesDilutedTTM")),
     }
 
@@ -141,27 +143,40 @@ def get_kpis(data: dict) -> dict:
 def get_fundamentals(data: dict) -> dict:
     m = data["metrics"]
     r = data["ratios"]
-    inc = data["income"][0] if data["income"] else {}
-    rev = _to_float(inc.get("revenue"))
-    fcf = _to_float(m.get("freeCashFlowPerShareTTM"))
+    inc = data["income"]
+    rev = _to_float(inc[0].get("revenue")) if inc else None
+
+    rev_growth = None
+    eps_growth = None
+    if len(inc) >= 2:
+        rev0 = _to_float(inc[0].get("revenue"))
+        rev1 = _to_float(inc[1].get("revenue"))
+        if rev0 and rev1 and rev1 != 0:
+            rev_growth = (rev0 - rev1) / abs(rev1)
+        ni0 = _to_float(inc[0].get("netIncome"))
+        ni1 = _to_float(inc[1].get("netIncome"))
+        if ni0 and ni1 and ni1 != 0:
+            eps_growth = (ni0 - ni1) / abs(ni1)
+
+    fcf = _to_float(r.get("freeCashFlowPerShareTTM"))
     return {
-        "eps_ttm": _to_float(m.get("epsTTM")),
+        "eps_ttm": _to_float(r.get("netIncomePerShareTTM")),
         "revenue_ttm": rev,
         "revenue_ttm_fmt": _fmt_large(rev),
-        "revenue_growth_yoy": _to_float(r.get("revenueGrowthTTM")),
+        "revenue_growth_yoy": rev_growth,
         "gross_margin": _to_float(r.get("grossProfitMarginTTM")),
         "operating_margin": _to_float(r.get("operatingProfitMarginTTM")),
         "net_margin": _to_float(r.get("netProfitMarginTTM")),
         "profit_margin": _to_float(r.get("netProfitMarginTTM")),
         "free_cash_flow": fcf,
         "free_cash_flow_fmt": _fmt_large(fcf),
-        "debt_to_equity": _to_float(r.get("debtEquityRatioTTM")),
-        "roe": _to_float(r.get("returnOnEquityTTM")),
-        "roa": _to_float(r.get("returnOnAssetsTTM")),
-        "earnings_growth": _to_float(r.get("epsGrowthTTM")),
-        "dividend_yield": _to_float(m.get("dividendYieldTTM")),
+        "debt_to_equity": _to_float(r.get("debtToEquityRatioTTM")),
+        "roe": _to_float(m.get("returnOnEquityTTM")),
+        "roa": _to_float(m.get("returnOnAssetsTTM")),
+        "earnings_growth": eps_growth,
+        "dividend_yield": _to_float(r.get("dividendYieldTTM")),
         "shares_outstanding": _to_float(m.get("weightedAverageSharesDilutedTTM")),
-        "book_value": _to_float(m.get("bookValuePerShareTTM")),
+        "book_value": _to_float(r.get("bookValuePerShareTTM")),
     }
 
 
@@ -174,6 +189,18 @@ def get_balance_sheet_metrics(data: dict) -> dict:
 
     def _col(rows, key):
         return [_to_float(row.get(key)) for row in rows if row.get(key) is not None]
+
+    rev_growth = None
+    eps_growth = None
+    if len(inc) >= 2:
+        rev0 = _to_float(inc[0].get("revenue"))
+        rev1 = _to_float(inc[1].get("revenue"))
+        if rev0 and rev1 and rev1 != 0:
+            rev_growth = (rev0 - rev1) / abs(rev1)
+        ni0 = _to_float(inc[0].get("netIncome"))
+        ni1 = _to_float(inc[1].get("netIncome"))
+        if ni0 and ni1 and ni1 != 0:
+            eps_growth = (ni0 - ni1) / abs(ni1)
 
     return {
         "current_assets": _col(bal, "totalCurrentAssets"),
@@ -188,8 +215,8 @@ def get_balance_sheet_metrics(data: dict) -> dict:
         "cash": _col(bal, "cashAndCashEquivalents"),
         "tax_rate": _to_float(r.get("effectiveTaxRateTTM")) or 0.21,
         "_info_proxy": {
-            "earningsGrowth": r.get("epsGrowthTTM"),
-            "revenueGrowth": r.get("revenueGrowthTTM"),
+            "earningsGrowth": eps_growth,
+            "revenueGrowth": rev_growth,
             "sharesOutstanding": m.get("weightedAverageSharesDilutedTTM"),
         },
     }
@@ -232,9 +259,10 @@ def _sma(close: pd.Series, length: int) -> float | None:
 
 
 def _parse_hist(raw) -> pd.DataFrame | None:
-    if not raw or "historical" not in raw:
+    if not raw:
         return None
-    rows = raw["historical"]
+    # Handle both direct array and {"historical": [...]} wrapped format
+    rows = raw if isinstance(raw, list) else raw.get("historical", [])
     if not rows:
         return None
     df = pd.DataFrame(rows)
