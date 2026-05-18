@@ -58,7 +58,6 @@ const styles = {
     background: pos ? 'rgba(72,187,120,0.15)' : 'rgba(245,101,101,0.15)',
     color: pos ? '#48bb78' : '#f56565',
   }),
-  grid2: { display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 },
   grid2eq: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 },
   emptyState: {
     textAlign: 'center',
@@ -162,19 +161,19 @@ export default function App() {
               )}
             </div>
 
+            {/* Verdict + AI Analysis */}
+            <Verdict
+              verdict={data.verdict}
+              confidence={data.confidence}
+              factors={data.factors}
+              summary={data.summary}
+            />
+
             {/* KPIs */}
             <KpiTiles kpis={data.kpis} price={data.price} />
 
-            {/* Chart + Verdict */}
-            <div style={styles.grid2}>
-              <PriceChart history={data.history} />
-              <Verdict
-                verdict={data.verdict}
-                confidence={data.confidence}
-                factors={data.factors}
-                summary={data.summary}
-              />
-            </div>
+            {/* Price Chart (full width) */}
+            <PriceChart history={data.history} />
 
             {/* Fundamentals + Technical */}
             <div style={styles.grid2eq}>
