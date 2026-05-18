@@ -84,10 +84,10 @@ const styles = {
 
 const LOADING_STEPS = [
   { delay: 0,     pct: 5,  label: 'Fetching market data',                 detail: 'Pulling price, financials, and news from Polygon…' },
-  { delay: 5000,  pct: 25, label: 'Running investment rules',             detail: 'Applying Buffett / Graham / Lynch criteria…' },
-  { delay: 11000, pct: 45, label: 'Value investor is analyzing',          detail: 'Reviewing fundamentals, valuation, and margin of safety…' },
-  { delay: 32000, pct: 70, label: 'Growth investor is making their case', detail: 'Evaluating momentum, TAM, and future earnings power…' },
-  { delay: 55000, pct: 90, label: 'Writing the summary',                  detail: 'Synthesizing both perspectives into a final analysis…' },
+  { delay: 5000,  pct: 20, label: 'Running investment rules',             detail: 'Applying Buffett / Graham / Lynch criteria…' },
+  { delay: 11000, pct: 38, label: 'Value investor is analyzing',          detail: 'Reviewing fundamentals, valuation, and margin of safety…' },
+  { delay: 32000, pct: 60, label: 'Growth investor is making their case', detail: 'Evaluating momentum, TAM, and future earnings power…' },
+  { delay: 53000, pct: 82, label: 'Judge Agent is weighing both arguments', detail: 'Reviewing the debate and forming a final verdict…' },
 ]
 
 export default function App() {
@@ -200,9 +200,6 @@ export default function App() {
         {!loading && !data && !error && (
           <div style={styles.emptyState}>
             <div style={styles.emptyTitle}>Enter a ticker symbol to begin</div>
-            <div style={styles.emptyHint}>
-              Analysis applies 20 rules from Warren Buffett, Benjamin Graham, and Peter Lynch
-            </div>
           </div>
         )}
 
