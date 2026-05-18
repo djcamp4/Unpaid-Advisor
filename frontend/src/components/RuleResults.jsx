@@ -97,10 +97,9 @@ function PhaseSection({ phaseId, phaseName, rules }) {
         <span style={{ fontSize: 11, fontWeight: 700, color: '#63b3ed', width: 22 }}>P{phaseId}</span>
         <span style={{ fontWeight: 700, fontSize: 13 }}>{phaseName}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          {counts.PASS > 0  && <span style={{ fontSize: 10, color: '#48bb78' }}>✓ {counts.PASS}</span>}
-          {counts.WARN > 0  && <span style={{ fontSize: 10, color: '#ed8936' }}>! {counts.WARN}</span>}
-          {counts.FAIL > 0  && <span style={{ fontSize: 10, color: '#f56565' }}>✗ {counts.FAIL}</span>}
-          {counts.MANUAL > 0 && <span style={{ fontSize: 10, color: '#718096' }}>? {counts.MANUAL}</span>}
+          {counts.PASS > 0 && <span style={{ fontSize: 10, color: '#48bb78' }}>✓ {counts.PASS}</span>}
+          {counts.WARN > 0 && <span style={{ fontSize: 10, color: '#ed8936' }}>! {counts.WARN}</span>}
+          {counts.FAIL > 0 && <span style={{ fontSize: 10, color: '#f56565' }}>✗ {counts.FAIL}</span>}
         </div>
       </div>
       {rules.map(r => <RuleRow key={r.rule_id} rule={r} />)}
@@ -111,16 +110,17 @@ function PhaseSection({ phaseId, phaseName, rules }) {
 export default function RuleResults({ ruleResults }) {
   if (!ruleResults?.length) return null
 
+  const scored = ruleResults.filter(r => r.status !== 'MANUAL')
+
   const phases = {}
-  ruleResults.forEach(r => {
+  scored.forEach(r => {
     if (!phases[r.phase_id]) phases[r.phase_id] = { name: r.phase_name, rules: [] }
     phases[r.phase_id].rules.push(r)
   })
 
-  const totalQuant = ruleResults.filter(r => r.rule_type === 'quantitative')
-  const passes = totalQuant.filter(r => r.status === 'PASS').length
-  const warns  = totalQuant.filter(r => r.status === 'WARN').length
-  const fails  = totalQuant.filter(r => r.status === 'FAIL').length
+  const passes = scored.filter(r => r.status === 'PASS').length
+  const warns  = scored.filter(r => r.status === 'WARN').length
+  const fails  = scored.filter(r => r.status === 'FAIL').length
 
   return (
     <div style={{
@@ -137,14 +137,13 @@ export default function RuleResults({ ruleResults }) {
           <span style={{ color: '#48bb78' }}>✓ {passes} Pass</span>
           <span style={{ color: '#ed8936' }}>! {warns} Warn</span>
           <span style={{ color: '#f56565' }}>✗ {fails} Fail</span>
-          <span style={{ color: '#718096' }}>? {ruleResults.length - totalQuant.length} Manual</span>
         </div>
       </div>
       <div style={{ fontSize: 11, color: '#4a5568', marginBottom: 16 }}>
-        Click any rule to expand details. Qualitative rules (marked ?) require your own judgment.
+        Click any rule to expand details.
       </div>
 
-      {Object.entries(phases).map(([id, { name, rules }]) => (
+      {Object.entries(phases).filter(([, { rules }]) => rules.length > 0).map(([id, { name, rules }]) => (
         <PhaseSection key={id} phaseId={id} phaseName={name} rules={rules} />
       ))}
     </div>
