@@ -40,7 +40,7 @@ export default function Verdict({ verdict, confidence, factors }) {
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
           <span style={{ fontSize: 11, color: '#718096', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Rule-based confidence
+            Confidence
           </span>
           <span style={{ fontSize: 14, fontWeight: 700, color }}>{confidence}%</span>
         </div>
