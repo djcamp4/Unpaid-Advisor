@@ -15,7 +15,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
-from analysis.summarizer import generate_summary
+from analysis.summarizer import generate_debate
 
 app = FastAPI(title="Unpaid Advisor API", version="1.0.0")
 
@@ -62,7 +62,7 @@ def analyze(symbol: str):
     kpis = get_kpis(data)
     fundamentals = get_fundamentals(data)
 
-    summary = generate_summary(
+    debate = generate_debate(
         symbol=symbol,
         company_name=company_name,
         verdict=score_data["verdict"],
@@ -88,6 +88,6 @@ def analyze(symbol: str):
         "technicals": get_technicals(data),
         "history": get_history(data),
         "news": get_news(data),
-        "summary": summary,
+        "debate": debate,
         **score_data,
     }

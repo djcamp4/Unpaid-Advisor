@@ -212,22 +212,27 @@ def get_kpis(data: dict) -> dict:
     mc = _to_float(det.get("market_cap"))
     shares = _shares(data)
 
-    # EPS from most recent annual income statement
+    # EPS — try multiple XBRL field names
     eps = _latest_fin(fins, "income_statement",
-                      "basic_earnings_per_share", "diluted_earnings_per_share")
+                      "basic_earnings_per_share", "diluted_earnings_per_share",
+                      "earnings_per_share", "basic_net_income_loss_per_share",
+                      "diluted_net_income_loss_per_share")
 
-    # Book value per share
+    # Book value per share — try multiple XBRL field names
     equity = _latest_fin(fins, "balance_sheet",
                          "equity", "equity_attributable_to_parent",
-                         "stockholders_equity")
+                         "stockholders_equity", "total_equity",
+                         "total_stockholders_equity")
     bvps = (equity / shares) if equity and shares else None
 
-    # PE, P/B, PEG
+    # PE, P/B
     pe = (price / eps) if price and eps and eps > 0 else None
     pb = (price / bvps) if price and bvps and bvps > 0 else None
 
     # PEG: PE / (earnings growth % yoy)
-    ni_series = _fin_series(fins, "income_statement", "net_income_loss", "net_income")
+    ni_series = _fin_series(fins, "income_statement",
+                            "net_income_loss", "net_income",
+                            "net_income_loss_attributable_to_parent")
     ni_vals = [v for v in ni_series if v is not None]
     eps_growth_pct = None
     if len(ni_vals) >= 2 and ni_vals[1] and ni_vals[1] != 0:
@@ -237,13 +242,21 @@ def get_kpis(data: dict) -> dict:
     # Volume
     volume = _to_float(snap.get("day", {}).get("v")) or _to_float(prev.get("v"))
 
-    # 52-week high/low from snapshot
-    w52_high = _to_float(det.get("week_52_high"))
-    w52_low = _to_float(det.get("week_52_low"))
+    # 52-week high/low and avg volume — computed from daily history (more reliable than ref fields)
+    hist = _parse_poly_hist(data.get("hist_daily"))
+    w52_high = w52_low = avg_volume = None
+    if hist is not None and not hist.empty:
+        w52_high = float(hist["High"].max())
+        w52_low = float(hist["Low"].min())
+        avg_volume = float(hist["Volume"].mean())
+    # Fall back to reference ticker fields if history unavailable
+    if w52_high is None:
+        w52_high = _to_float(det.get("week_52_high"))
+    if w52_low is None:
+        w52_low = _to_float(det.get("week_52_low"))
 
     # Dividend yield
-    div_yield = _latest_fin(fins, "income_statement",
-                             "dividends_per_common_share")
+    div_yield = _latest_fin(fins, "income_statement", "dividends_per_common_share")
     div_yield_pct = (div_yield / price) if div_yield and price else None
 
     return {
@@ -256,7 +269,7 @@ def get_kpis(data: dict) -> dict:
         "week_52_high": w52_high,
         "week_52_low": w52_low,
         "volume": volume,
-        "avg_volume": None,
+        "avg_volume": avg_volume,
         "dividend_yield": div_yield_pct,
         "beta": _to_float(det.get("beta")),
         "eps_ttm": eps,
@@ -269,8 +282,12 @@ def get_fundamentals(data: dict) -> dict:
     price = get_price(data)
     shares = _shares(data)
 
-    rev_series = _fin_series(fins, "income_statement", "revenues", "revenue")
-    ni_series = _fin_series(fins, "income_statement", "net_income_loss", "net_income")
+    rev_series = _fin_series(fins, "income_statement",
+                             "revenues", "revenue", "total_revenues",
+                             "net_revenues", "total_net_revenues")
+    ni_series = _fin_series(fins, "income_statement",
+                            "net_income_loss", "net_income",
+                            "net_income_loss_attributable_to_parent")
     rev_vals = [v for v in rev_series if v is not None]
     ni_vals = [v for v in ni_series if v is not None]
 
@@ -280,16 +297,25 @@ def get_fundamentals(data: dict) -> dict:
     eps_growth = ((ni_vals[0] - ni_vals[1]) / abs(ni_vals[1])
                   if len(ni_vals) >= 2 and ni_vals[1] else None)
 
-    gross_profit = _latest_fin(fins, "income_statement", "gross_profit")
+    gross_profit = _latest_fin(fins, "income_statement",
+                               "gross_profit", "gross_profit_loss")
     op_income = _latest_fin(fins, "income_statement",
-                            "operating_income_loss", "operating_income")
-    net_income = _latest_fin(fins, "income_statement", "net_income_loss", "net_income")
+                            "operating_income_loss", "operating_income",
+                            "income_loss_from_operations")
+    net_income = _latest_fin(fins, "income_statement",
+                             "net_income_loss", "net_income",
+                             "net_income_loss_attributable_to_parent")
     equity = _latest_fin(fins, "balance_sheet",
-                         "equity", "equity_attributable_to_parent")
-    total_assets = _latest_fin(fins, "balance_sheet", "assets")
+                         "equity", "equity_attributable_to_parent",
+                         "stockholders_equity", "total_equity",
+                         "total_stockholders_equity")
+    total_assets = _latest_fin(fins, "balance_sheet", "assets", "total_assets")
     op_cf = _latest_fin(fins, "cash_flow_statement",
-                        "net_cash_flow_from_operating_activities")
-    capex = _latest_fin(fins, "cash_flow_statement", "capital_expenditure")
+                        "net_cash_flow_from_operating_activities",
+                        "net_cash_provided_by_operating_activities")
+    capex = _latest_fin(fins, "cash_flow_statement",
+                        "capital_expenditure", "purchases_of_property_plant_and_equipment",
+                        "capital_expenditures")
     fcf = (op_cf + capex) if op_cf and capex else op_cf
 
     gross_margin = (gross_profit / rev) if gross_profit and rev else None
@@ -304,8 +330,11 @@ def get_fundamentals(data: dict) -> dict:
     div_yield = (div / price) if div and price else None
 
     eps = _latest_fin(fins, "income_statement",
-                      "basic_earnings_per_share", "diluted_earnings_per_share")
-    ltd = _latest_fin(fins, "balance_sheet", "long_term_debt", "noncurrent_debt")
+                      "basic_earnings_per_share", "diluted_earnings_per_share",
+                      "earnings_per_share", "basic_net_income_loss_per_share")
+    ltd = _latest_fin(fins, "balance_sheet",
+                      "long_term_debt", "noncurrent_debt",
+                      "long_term_debt_and_capital_lease_obligation")
     debt_to_eq = (ltd / equity) if ltd and equity and equity > 0 else None
 
     return {
@@ -355,8 +384,10 @@ def get_balance_sheet_metrics(data: dict) -> dict:
     def _cf(*keys):
         return _series_from(fins, "cash_flow_statement", *keys)
 
-    ni_series = _is("net_income_loss", "net_income")
-    rev_series = _is("revenues", "revenue")
+    ni_series = _is("net_income_loss", "net_income",
+                    "net_income_loss_attributable_to_parent")
+    rev_series = _is("revenues", "revenue", "total_revenues",
+                     "net_revenues", "total_net_revenues")
     ni_vals = [v for v in ni_series if v is not None]
     rev_vals = [v for v in rev_series if v is not None]
 
@@ -366,16 +397,23 @@ def get_balance_sheet_metrics(data: dict) -> dict:
                   if len(rev_vals) >= 2 and rev_vals[1] else None)
 
     return {
-        "current_assets": _bs("current_assets"),
-        "current_liabilities": _bs("current_liabilities"),
-        "long_term_debt": _bs("long_term_debt", "noncurrent_debt"),
-        "equity": _bs("equity", "equity_attributable_to_parent", "stockholders_equity"),
+        "current_assets": _bs("current_assets", "total_current_assets"),
+        "current_liabilities": _bs("current_liabilities", "total_current_liabilities"),
+        "long_term_debt": _bs("long_term_debt", "noncurrent_debt",
+                              "long_term_debt_and_capital_lease_obligation"),
+        "equity": _bs("equity", "equity_attributable_to_parent",
+                      "stockholders_equity", "total_equity", "total_stockholders_equity"),
         "net_income": ni_series,
-        "da": _cf("depreciation_and_amortization", "depreciation_depletion_and_amortization"),
-        "capex": _cf("capital_expenditure"),
-        "op_income": _is("operating_income_loss", "operating_income"),
-        "total_debt": _bs("long_term_debt", "noncurrent_debt"),
-        "cash": _bs("cash_and_cash_equivalents", "cash"),
+        "da": _cf("depreciation_and_amortization", "depreciation_depletion_and_amortization",
+                  "depreciation_and_amortization_discontinued_operations"),
+        "capex": _cf("capital_expenditure", "purchases_of_property_plant_and_equipment",
+                     "capital_expenditures"),
+        "op_income": _is("operating_income_loss", "operating_income",
+                         "income_loss_from_operations"),
+        "total_debt": _bs("long_term_debt", "noncurrent_debt",
+                          "long_term_debt_and_capital_lease_obligation"),
+        "cash": _bs("cash_and_cash_equivalents", "cash",
+                    "cash_cash_equivalents_and_short_term_investments"),
         "tax_rate": 0.21,
         "_info_proxy": {
             "earningsGrowth": eps_growth,

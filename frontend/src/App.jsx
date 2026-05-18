@@ -5,8 +5,8 @@ import KpiTiles from './components/KpiTiles'
 import PriceChart from './components/PriceChart'
 import Fundamentals from './components/Fundamentals'
 import Technical from './components/Technical'
-import RuleResults from './components/RuleResults'
 import News from './components/News'
+import Debate from './components/Debate'
 
 const styles = {
   nav: {
@@ -161,13 +161,15 @@ export default function App() {
               )}
             </div>
 
-            {/* Verdict + AI Analysis */}
+            {/* Rule-based verdict bar */}
             <Verdict
               verdict={data.verdict}
               confidence={data.confidence}
               factors={data.factors}
-              summary={data.summary}
             />
+
+            {/* AI Debate */}
+            <Debate debate={data.debate} />
 
             {/* KPIs */}
             <KpiTiles kpis={data.kpis} price={data.price} />
@@ -180,9 +182,6 @@ export default function App() {
               <Fundamentals fundamentals={data.fundamentals} />
               <Technical technicals={data.technicals} />
             </div>
-
-            {/* Rule Results */}
-            <RuleResults ruleResults={data.rule_results} />
 
             {/* News */}
             <News news={data.news} />
