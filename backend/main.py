@@ -47,14 +47,18 @@ def analyze(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scoring failed: {e}")
 
-    q = data["quote"]
-    p = data["profile"]
+    det = data["details"]
     price = get_price(data)
     prev_close = get_prev_close(data)
     change = round(price - prev_close, 2) if price and prev_close else None
     change_pct = round(change / prev_close * 100, 2) if change and prev_close else None
 
-    company_name = p.get("companyName") or q.get("name") or symbol
+    company_name = det.get("name") or symbol
+    _exchange_map = {"XNAS": "NASDAQ", "XNYS": "NYSE", "XASE": "AMEX", "BATS": "BATS"}
+    raw_exchange = det.get("primary_exchange", "")
+    exchange = _exchange_map.get(raw_exchange, raw_exchange)
+    sector = det.get("sic_description", "")
+
     kpis = get_kpis(data)
     fundamentals = get_fundamentals(data)
 
@@ -72,9 +76,9 @@ def analyze(symbol: str):
     return {
         "symbol": symbol,
         "company_name": company_name,
-        "exchange": p.get("exchangeShortName", ""),
-        "sector": p.get("sector", ""),
-        "industry": p.get("industry", ""),
+        "exchange": exchange,
+        "sector": sector,
+        "industry": sector,
         "price": price,
         "prev_close": prev_close,
         "change": change,
