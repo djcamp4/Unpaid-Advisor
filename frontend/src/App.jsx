@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { analyzeStock } from './api'
 import Verdict from './components/Verdict'
 import KpiTiles from './components/KpiTiles'
@@ -82,11 +82,26 @@ const styles = {
   },
 }
 
+const LOADING_STEPS = [
+  { delay: 0,     pct: 5,  label: 'Fetching market data',                 detail: 'Pulling price, financials, and news from Polygon…' },
+  { delay: 5000,  pct: 25, label: 'Running investment rules',             detail: 'Applying Buffett / Graham / Lynch criteria…' },
+  { delay: 11000, pct: 45, label: 'Value investor is analyzing',          detail: 'Reviewing fundamentals, valuation, and margin of safety…' },
+  { delay: 32000, pct: 70, label: 'Growth investor is making their case', detail: 'Evaluating momentum, TAM, and future earnings power…' },
+  { delay: 55000, pct: 90, label: 'Writing the summary',                  detail: 'Synthesizing both perspectives into a final analysis…' },
+]
+
 export default function App() {
   const [ticker, setTicker] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingStep, setLoadingStep] = useState(0)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!loading) { setLoadingStep(0); return }
+    const timers = LOADING_STEPS.map((s, i) => setTimeout(() => setLoadingStep(i), s.delay))
+    return () => timers.forEach(clearTimeout)
+  }, [loading])
 
   async function handleAnalyze(e) {
     e.preventDefault()
@@ -130,8 +145,55 @@ export default function App() {
         {error && <div style={styles.errorBox}>Error: {error}</div>}
 
         {loading && (
-          <div style={styles.spinner}>
-            Processing…
+          <div style={{ padding: '60px 24px', maxWidth: 520, margin: '0 auto' }}>
+            {/* Progress bar */}
+            <div style={{ marginBottom: 36 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: '#718096' }}>
+                  {LOADING_STEPS[loadingStep]?.label}…
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#63b3ed' }}>
+                  {LOADING_STEPS[loadingStep]?.pct}%
+                </span>
+              </div>
+              <div style={{ height: 6, background: '#1e2535', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  borderRadius: 3,
+                  width: `${LOADING_STEPS[loadingStep]?.pct ?? 5}%`,
+                  background: 'linear-gradient(90deg, #3182ce, #63b3ed)',
+                  transition: 'width 1.2s ease',
+                }} />
+              </div>
+            </div>
+
+            {/* Step list */}
+            {LOADING_STEPS.map((s, i) => {
+              const done = i < loadingStep
+              const active = i === loadingStep
+              return (
+                <div key={i} style={{ display: 'flex', gap: 16, marginBottom: 20, opacity: done ? 0.4 : active ? 1 : 0.2 }}>
+                  <div style={{
+                    flexShrink: 0, width: 22, height: 22, borderRadius: '50%', marginTop: 2,
+                    background: done ? '#48bb78' : active ? '#3182ce' : '#2d3748',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, color: '#fff',
+                    boxShadow: active ? '0 0 0 4px rgba(49,130,206,0.25)' : 'none',
+                    transition: 'background 0.4s ease',
+                  }}>
+                    {done ? '✓' : i + 1}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: active ? 700 : 500, color: active ? '#e2e8f0' : '#718096' }}>
+                      {s.label}{active ? '…' : ''}
+                    </div>
+                    {active && (
+                      <div style={{ fontSize: 12, color: '#4a5568', marginTop: 3 }}>{s.detail}</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
