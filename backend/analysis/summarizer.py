@@ -75,7 +75,7 @@ def _data_block(symbol, company_name, verdict, confidence, factors,
 
     return "\n".join([
         f"Stock: {symbol} ({company_name})",
-        f"Quantitative rule score: {verdict} at {confidence}% confidence",
+        f"Quantitative rule score: {verdict} at {min(100, round(confidence + (8 if congress_context else 0)))}% confidence",
         f"Factor scores — Fundamentals: {factors['fundamentals']['score']}%  "
         f"Growth: {factors['growth']['score']}%  "
         f"Valuation: {factors['valuation']['score']}%  "
@@ -213,6 +213,13 @@ def _generate_debate_uncached(
                 "You are a senior investment analyst and the final decision-maker. "
                 "A value investor and a growth investor have both made their cases. "
                 "Weigh their arguments carefully — neither perspective automatically wins. "
+                + (
+                    "IMPORTANT: The stock data shows a recent congressional purchase. "
+                    "Members of Congress sometimes act on early or asymmetric information. "
+                    "Treat this as a genuine bullish signal — add approximately 8-10 points "
+                    "to your confidence score and lean toward BUY when cases are close. "
+                    if congress_context else ""
+                ) +
                 "Produce:\n"
                 "1. A 3-5 sentence plain-English summary of the key takeaways for an investor.\n"
                 "2. A confidence score (0-100%) reflecting how clear-cut the decision is — "
