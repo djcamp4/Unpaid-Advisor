@@ -46,7 +46,7 @@ def health():
 
 
 @app.get("/analyze/{symbol}")
-def analyze(symbol: str):
+async def analyze(symbol: str):
     symbol = symbol.upper().strip()
     try:
         data = fetch_all(symbol)
