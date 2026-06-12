@@ -297,7 +297,7 @@ export default function StockSelector() {
 
       {phase === 'done' && stocks.length === 0 && (
         <div style={s.noResults}>
-          No stocks received a BUY verdict from the Judge in this scan.
+          No stocks received a BUY verdict from the Agent in this scan.
         </div>
       )}
     </div>

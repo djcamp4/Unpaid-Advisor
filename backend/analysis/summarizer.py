@@ -8,10 +8,16 @@ Returns None gracefully if API key is missing or any call fails.
 
 import os
 import re
+import time
 import requests
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MODEL = "anthropic/claude-opus-4"
+
+# Cache debate results for 2 hours so repeated runs of the same symbol
+# (e.g. stock selector + manual analysis) return consistent verdicts.
+_debate_cache: dict[str, tuple[float, dict]] = {}
+_CACHE_TTL = 7200  # seconds
 
 
 def _call(messages: list, api_key: str, max_tokens: int = 500) -> str | None:
@@ -87,6 +93,27 @@ def _data_block(symbol, company_name, verdict, confidence, factors,
 
 
 def generate_debate(
+    symbol: str,
+    company_name: str,
+    verdict: str,
+    confidence: float,
+    factors: dict,
+    rule_results: list,
+    kpis: dict,
+    fundamentals: dict,
+) -> dict | None:
+    cached = _debate_cache.get(symbol)
+    if cached and time.time() - cached[0] < _CACHE_TTL:
+        return cached[1]
+    result = _generate_debate_uncached(
+        symbol, company_name, verdict, confidence, factors, rule_results, kpis, fundamentals
+    )
+    if result:
+        _debate_cache[symbol] = (time.time(), result)
+    return result
+
+
+def _generate_debate_uncached(
     symbol: str,
     company_name: str,
     verdict: str,
