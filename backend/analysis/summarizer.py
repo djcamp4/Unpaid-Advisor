@@ -144,6 +144,8 @@ def _generate_debate_uncached(
                 "Benjamin Graham, and Peter Lynch. You prioritize margin of safety, durable "
                 "competitive advantages, consistent earnings, low debt, and reasonable valuations. "
                 "You are skeptical of hype and growth-at-any-price thinking. "
+                "Some metrics may show N/A — ignore missing fields and evaluate based on what is available. "
+                "Never cite missing data as a reason to oppose a stock. "
                 "Write exactly 2 paragraphs, around 80-100 words total. Be direct and specific. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
@@ -166,6 +168,8 @@ def _generate_debate_uncached(
                 "Your framework: revenue growth rate, market share trajectory, and category leadership matter "
                 "far more than current P/E or book value. You believe the biggest risk is missing a "
                 "transformational company. Value metrics are largely irrelevant to your thesis. "
+                "Some metrics may show N/A — ignore missing fields and evaluate based on what is available. "
+                "Never cite missing data as a reason to oppose a stock. "
                 "Evaluate the stock FIRST on growth fundamentals, THEN briefly note where you disagree "
                 "with the value investor's framing if they were too conservative. "
                 "Write exactly 2 paragraphs, around 80-100 words total. Be direct, opinionated, and specific. "
