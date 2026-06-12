@@ -185,7 +185,14 @@ async def stock_selector():
             yield sse({"type": "analyzing", "ticker": ticker, "found": len(results), "checked": checked})
 
             try:
-                data = await asyncio.to_thread(fetch_all, ticker)
+                fetch_task = asyncio.create_task(asyncio.to_thread(fetch_all, ticker))
+                while not fetch_task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(fetch_task), timeout=10)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                data = fetch_task.result()
+
                 score_data = await asyncio.to_thread(run_rules, data)
 
                 det = data["details"]
