@@ -131,10 +131,20 @@ export default function App() {
       </nav>
 
       <main style={styles.main}>
-        <StockSelector />
+        <StockSelector onSelect={sym => {
+          setTicker(sym)
+          setData(null)
+          setError(null)
+          setLoading(true)
+          analyzeStock(sym)
+            .then(result => setData(result))
+            .catch(err => setError(err.response?.data?.detail || err.message || 'Unknown error'))
+            .finally(() => setLoading(false))
+          window.scrollTo({ top: document.getElementById('stock-analysis')?.offsetTop - 20, behavior: 'smooth' })
+        }} />
 
         {/* Stock Analysis panel */}
-        <div style={{
+        <div id="stock-analysis" style={{
           background: '#161b27',
           border: '1px solid #2d3748',
           borderRadius: 14,

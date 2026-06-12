@@ -137,7 +137,7 @@ function loadSaved() {
   } catch { return null }
 }
 
-export default function StockSelector() {
+export default function StockSelector({ onSelect }) {
   const saved = loadSaved()
   const [phase, setPhase] = useState(saved ? 'done' : 'idle')
   const [statusMsg, setStatusMsg] = useState('')
@@ -282,7 +282,11 @@ export default function StockSelector() {
       {(phase === 'done' || (phase === 'running' && stocks.length > 0)) && stocks.length > 0 && (
         <div style={{ ...s.grid, marginTop: phase === 'running' ? 20 : 4 }}>
           {stocks.map(stock => (
-            <div key={stock.symbol} style={s.card}>
+            <div
+              key={stock.symbol}
+              style={{ ...s.card, cursor: onSelect ? 'pointer' : 'default' }}
+              onClick={() => onSelect && onSelect(stock.symbol)}
+            >
               <LogoIcon iconUrl={stock.icon_url} symbol={stock.symbol} />
               <div style={s.cardSymbol}>{stock.symbol}</div>
               <div style={s.cardName}>{stock.company_name}</div>
