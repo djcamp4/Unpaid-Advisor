@@ -30,7 +30,10 @@ def _call(messages: list, api_key: str, max_tokens: int = 500) -> str | None:
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip() or None
-    except Exception:
+    except Exception as e:
+        print(f"[summarizer] OpenRouter call failed: {e}", flush=True)
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"[summarizer] Response body: {e.response.text[:500]}", flush=True)
         return None
 
 
