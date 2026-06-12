@@ -199,7 +199,9 @@ async def stock_selector():
                 if not debate:
                     continue
 
-                if (debate.get("verdict") or "").upper() == "BUY":
+                judge_confidence = debate.get("confidence") or 0
+                judge_verdict = (debate.get("verdict") or "").upper()
+                if judge_verdict == "BUY" or judge_confidence >= 60:
                     branding = det.get("branding") or {}
                     icon_url = branding.get("icon_url")
                     if icon_url and polygon_key:
