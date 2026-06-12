@@ -151,17 +151,19 @@ def _generate_debate_uncached(
     value_decision = _extract_decision(value_raw, "DECISION:")
     value_case = _clean(value_raw, "DECISION:")
 
-    # ── Agent 2: Growth investor (reads value case first) ─────────────────────
+    # ── Agent 2: Growth investor (independent view, then challenges value case) ─
     growth_raw = _call([
         {
             "role": "system",
             "content": (
-                "You are an aggressive growth investor focused on total addressable market, "
-                "revenue trajectory, competitive positioning, and future earnings power. "
-                "You believe the biggest risk is missing a transformational company. "
-                "You've read the value investor's take — engage with their specific points "
-                "where you agree or disagree, and make your own case. "
-                "Write exactly 2 paragraphs, around 80-100 words total. Be direct and specific. "
+                "You are an aggressive growth investor focused exclusively on total addressable market, "
+                "revenue trajectory, competitive moat, and future earnings power. "
+                "Your framework: revenue growth rate, market share trajectory, and category leadership matter "
+                "far more than current P/E or book value. You believe the biggest risk is missing a "
+                "transformational company. Value metrics are largely irrelevant to your thesis. "
+                "Evaluate the stock FIRST on growth fundamentals, THEN briefly note where you disagree "
+                "with the value investor's framing if they were too conservative. "
+                "Write exactly 2 paragraphs, around 80-100 words total. Be direct, opinionated, and specific. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
@@ -169,8 +171,8 @@ def _generate_debate_uncached(
             "role": "user",
             "content": (
                 f"Stock data:\n\n{data}\n\n"
-                f"The value investor argued:\n{value_case}\n\n"
-                "Now give your growth investing perspective, responding to their points."
+                f"The value investor's take (which you may push back on):\n{value_case}\n\n"
+                "Give your independent growth investing verdict. Lead with growth metrics, not value metrics."
             ),
         },
     ], api_key, max_tokens=200)

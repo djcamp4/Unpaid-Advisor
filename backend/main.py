@@ -201,7 +201,10 @@ async def stock_selector():
 
                 judge_confidence = debate.get("confidence") or 0
                 judge_verdict = (debate.get("verdict") or "").upper()
-                if judge_verdict == "BUY" or judge_confidence >= 60:
+                value_decision = (debate.get("value") or {}).get("decision", "").upper()
+                growth_decision = (debate.get("growth") or {}).get("decision", "").upper()
+                agent_agrees = value_decision == "BUY" or growth_decision == "BUY"
+                if (judge_verdict == "BUY" or judge_confidence >= 60) and agent_agrees:
                     branding = det.get("branding") or {}
                     icon_url = branding.get("icon_url")
                     if icon_url and polygon_key:
