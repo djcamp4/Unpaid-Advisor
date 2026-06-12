@@ -48,10 +48,10 @@ def _ticker(tx: dict) -> str | None:
     return t
 
 
-async def fetch_congressional_purchases(days: int = 30) -> list[str]:
+async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict]:
     """
-    Return deduplicated ticker symbols sorted by largest single purchase,
-    drawn from recent Senate and House disclosures via Financial Modeling Prep.
+    Return {ticker: {max_amount, buyers: [{name, chamber, amount, date}]}}
+    sorted by max_amount descending.
     """
     api_key = os.getenv("FMP_API_KEY", "")
     if not api_key:
@@ -67,13 +67,15 @@ async def fetch_congressional_purchases(days: int = 30) -> list[str]:
         hr = await client.get(f"{FMP_BASE}/house-latest", params=params)
 
     transactions: list[dict] = []
-    for resp in (sr, hr):
+    for resp, chamber in [(sr, "Senate"), (hr, "House")]:
         if resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):
+                for tx in data:
+                    tx["_chamber"] = chamber
                 transactions.extend(data)
 
-    best: dict[str, int] = {}
+    details: dict[str, dict] = {}
     for tx in transactions:
         if not _is_purchase(tx):
             continue
@@ -84,7 +86,53 @@ async def fetch_congressional_purchases(days: int = 30) -> list[str]:
         if not ticker:
             continue
         amount = _parse_amount(tx.get("amount", ""))
-        if amount > best.get(ticker, -1):
-            best[ticker] = amount
+        name = f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip() or "Unknown"
+        chamber = tx.get("_chamber", "Congress")
 
-    return [t for t, _ in sorted(best.items(), key=lambda x: x[1], reverse=True)]
+        if ticker not in details:
+            details[ticker] = {"max_amount": 0, "buyers": []}
+
+        if amount > details[ticker]["max_amount"]:
+            details[ticker]["max_amount"] = amount
+
+        details[ticker]["buyers"].append({
+            "name": name,
+            "chamber": chamber,
+            "amount": tx.get("amount", "undisclosed"),
+            "date": str(tx_date),
+        })
+
+    return details
+
+
+async def fetch_congressional_purchases(days: int = 30) -> list[str]:
+    """Return deduplicated ticker symbols sorted by largest single purchase."""
+    details = await fetch_congressional_purchase_details(days)
+    return [t for t, d in sorted(details.items(), key=lambda x: x[1]["max_amount"], reverse=True)]
+
+
+async def get_ticker_congressional_context(ticker: str, days: int = 60) -> dict | None:
+    """Return congressional purchase context for a specific ticker, or None."""
+    try:
+        details = await fetch_congressional_purchase_details(days)
+        return details.get(ticker.upper())
+    except Exception:
+        return None
+
+
+def format_congress_context(context: dict | None) -> str | None:
+    """Format congressional context into a readable string for agent prompts."""
+    if not context:
+        return None
+    buyers = context.get("buyers", [])
+    if not buyers:
+        return None
+    lines = []
+    seen = set()
+    for b in buyers:
+        key = b["name"]
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(f"{b['name']} ({b['chamber']}) purchased {b['amount']} on {b['date']}")
+    return "; ".join(lines[:3])  # cap at 3 buyers to keep prompt concise

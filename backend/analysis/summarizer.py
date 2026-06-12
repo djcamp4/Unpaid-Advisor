@@ -65,7 +65,7 @@ def _clean(text: str, *tags) -> str:
 
 
 def _data_block(symbol, company_name, verdict, confidence, factors,
-                rule_results, kpis, fundamentals) -> str:
+                rule_results, kpis, fundamentals, congress_context=None) -> str:
     passed = [r for r in rule_results if r["status"] == "PASS"  and r["rule_type"] == "quantitative"]
     failed = [r for r in rule_results if r["status"] == "FAIL"  and r["rule_type"] == "quantitative"]
     warned = [r for r in rule_results if r["status"] == "WARN"  and r["rule_type"] == "quantitative"]
@@ -92,6 +92,11 @@ def _data_block(symbol, company_name, verdict, confidence, factors,
         f"Rules passed ({len(passed)}): " + (", ".join(r["name"] for r in passed[:6]) or "none"),
         f"Rules failed ({len(failed)}): " + (", ".join(r["name"] for r in failed[:6]) or "none"),
         f"Rules warned ({len(warned)}): " + (", ".join(r["name"] for r in warned[:4]) or "none"),
+        *(
+            [f"\nCongressional signal: {congress_context}",
+             "Note: Members of Congress sometimes act on asymmetric or early-access information."]
+            if congress_context else []
+        ),
     ])
 
 
@@ -104,12 +109,14 @@ def generate_debate(
     rule_results: list,
     kpis: dict,
     fundamentals: dict,
+    congress_context: str | None = None,
 ) -> dict | None:
     cached = _debate_cache.get(symbol)
     if cached and time.time() - cached[0] < _CACHE_TTL:
         return cached[1]
     result = _generate_debate_uncached(
-        symbol, company_name, verdict, confidence, factors, rule_results, kpis, fundamentals
+        symbol, company_name, verdict, confidence, factors, rule_results, kpis, fundamentals,
+        congress_context=congress_context,
     )
     if result:
         _debate_cache[symbol] = (time.time(), result)
@@ -125,6 +132,7 @@ def _generate_debate_uncached(
     rule_results: list,
     kpis: dict,
     fundamentals: dict,
+    congress_context: str | None = None,
 ) -> dict | None:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     print(f"[summarizer] api_key present: {bool(api_key)}, length: {len(api_key) if api_key else 0}", flush=True)
@@ -133,7 +141,7 @@ def _generate_debate_uncached(
         return None
 
     data = _data_block(symbol, company_name, verdict, confidence, factors,
-                       rule_results, kpis, fundamentals)
+                       rule_results, kpis, fundamentals, congress_context)
 
     # ── Agent 1: Value investor ───────────────────────────────────────────────
     value_raw = _call([
@@ -170,6 +178,12 @@ def _generate_debate_uncached(
                 "transformational company. Value metrics are largely irrelevant to your thesis. "
                 "Some metrics may show N/A — ignore missing fields and evaluate based on what is available. "
                 "Never cite missing data as a reason to oppose a stock. "
+                + (
+                    "A member of Congress recently purchased this stock. Treat this as a meaningful "
+                    "bullish signal — congressional members often act on early or asymmetric information. "
+                    "Give this signal genuine weight in your thesis. "
+                    if congress_context else ""
+                ) +
                 "Evaluate the stock FIRST on growth fundamentals, THEN briefly note where you disagree "
                 "with the value investor's framing if they were too conservative. "
                 "Write exactly 2 paragraphs, around 80-100 words total. Be direct, opinionated, and specific. "

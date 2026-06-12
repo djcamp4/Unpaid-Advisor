@@ -23,7 +23,12 @@ from analysis.fetcher import (
 )
 from analysis.scorer import run_rules
 from analysis.summarizer import generate_debate
-from analysis.congress_trades import fetch_congressional_purchases
+from analysis.congress_trades import (
+    fetch_congressional_purchases,
+    fetch_congressional_purchase_details,
+    get_ticker_congressional_context,
+    format_congress_context,
+)
 
 app = FastAPI(title="Unpaid Advisor API", version="1.0.0")
 
@@ -70,6 +75,9 @@ def analyze(symbol: str):
     kpis = get_kpis(data)
     fundamentals = get_fundamentals(data)
 
+    congress_ctx = await get_ticker_congressional_context(symbol)
+    congress_str = format_congress_context(congress_ctx)
+
     debate = generate_debate(
         symbol=symbol,
         company_name=company_name,
@@ -79,6 +87,7 @@ def analyze(symbol: str):
         rule_results=score_data["rule_results"],
         kpis=kpis,
         fundamentals=fundamentals,
+        congress_context=congress_str,
     )
 
     # Judge's verdict and confidence override the rule engine when available
@@ -153,15 +162,16 @@ async def stock_selector():
         yield sse({"type": "status", "message": "Fetching congressional trades…"})
 
         try:
-            tickers = await fetch_congressional_purchases(days=30)
+            trade_details = await fetch_congressional_purchase_details(days=30)
         except Exception as e:
             yield sse({"type": "error", "message": f"Capitol Trades API error: {e}"})
             return
 
-        if not tickers:
-            yield sse({"type": "error", "message": "No congressional purchases found in the last 10 days."})
+        if not trade_details:
+            yield sse({"type": "error", "message": "No congressional purchases found in the last 30 days."})
             return
 
+        tickers = [t for t, d in sorted(trade_details.items(), key=lambda x: x[1]["max_amount"], reverse=True)]
         yield sse({"type": "status", "message": f"Found {len(tickers)} unique tickers. Screening…"})
 
         results: list[dict] = []
@@ -185,6 +195,7 @@ async def stock_selector():
 
                 # Run debate in background thread, sending keepalives every 10s
                 # so the SSE connection doesn't drop during long OpenRouter calls
+                congress_str = format_congress_context(trade_details.get(ticker))
                 debate_task = asyncio.create_task(asyncio.to_thread(
                     lambda: generate_debate(
                         symbol=ticker,
@@ -195,6 +206,7 @@ async def stock_selector():
                         rule_results=score_data["rule_results"],
                         kpis=kpis,
                         fundamentals=fundamentals,
+                        congress_context=congress_str,
                     )
                 ))
                 while not debate_task.done():
