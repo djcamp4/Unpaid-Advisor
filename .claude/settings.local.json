@@ -5,7 +5,24 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git config *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:housestockwatcher.com)",
+      "WebFetch(domain:house-stock-watcher-data.s3-us-west-2.amazonaws.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:finnhub.io)",
+      "WebFetch(domain:www.politiciantradetracker.us)",
+      "WebFetch(domain:www.quiverquant.com)",
+      "WebFetch(domain:senatestockwatcher.com)",
+      "WebFetch(domain:api.capitoltrades.com)",
+      "WebFetch(domain:www.capitoltrades.com)",
+      "WebFetch(domain:site.financialmodelingprep.com)",
+      "WebFetch(domain:tradercongress.com)",
+      "WebFetch(domain:apify.com)",
+      "Bash(git -C \"J:\\\\GitHub\\\\Unpaid Advisor\" status)",
+      "Bash(git -C \"J:\\\\GitHub\\\\Unpaid Advisor\" add -A)"
     ]
   }
 }

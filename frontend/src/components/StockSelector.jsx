@@ -177,8 +177,21 @@ export default function StockSelector() {
           setStatusMsg(`Analyzing ${event.ticker}…`)
           break
         case 'found':
-          setStocks(prev => [...prev, event.stock])
-          setFound(event.total)
+          setStocks(prev => {
+            if (prev.length >= 5) return prev
+            return [...prev, event.stock]
+          })
+          setFound(f => {
+            const next = f + 1
+            if (next >= 5) {
+              setTimeout(() => {
+                if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null }
+                setPhase('done')
+                setStatusMsg('')
+              }, 0)
+            }
+            return next
+          })
           setActiveTicker(null)
           break
         case 'complete': {
@@ -254,7 +267,7 @@ export default function StockSelector() {
 
       {phase === 'running' && (
         <div style={s.progressWrap}>
-          <div style={s.statusLine}>{statusMsg} &nbsp;·&nbsp; {stocks.length}/5 found</div>
+          <div style={s.statusLine}>{statusMsg} &nbsp;·&nbsp; {found}/5 found</div>
           <div style={s.progressBar}>
             <div style={s.progressFill(progressPct)} />
           </div>

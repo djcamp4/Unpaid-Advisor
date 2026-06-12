@@ -199,10 +199,7 @@ async def stock_selector():
                 if not debate:
                     continue
 
-                value_ok = (debate.get("value") or {}).get("decision", "").upper() == "BUY"
-                growth_ok = (debate.get("growth") or {}).get("decision", "").upper() == "BUY"
-
-                if value_ok and growth_ok:
+                if (debate.get("verdict") or "").upper() == "BUY":
                     branding = det.get("branding") or {}
                     icon_url = branding.get("icon_url")
                     if icon_url and polygon_key:
