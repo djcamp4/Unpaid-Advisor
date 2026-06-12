@@ -42,9 +42,7 @@ export default function Verdict({ verdict, confidence, factors }) {
           <span style={{ fontSize: 11, color: '#718096', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Confidence
           </span>
-          <span style={{ fontSize: 14, fontWeight: 700, color }}>
-            {confidence}% &mdash; {verdict}
-          </span>
+          <span style={{ fontSize: 14, fontWeight: 700, color }}>{confidence}%</span>
         </div>
         <div style={{ height: 7, background: '#1e2535', borderRadius: 4 }}>
           <div style={{
