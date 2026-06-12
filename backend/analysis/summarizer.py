@@ -127,7 +127,9 @@ def _generate_debate_uncached(
     fundamentals: dict,
 ) -> dict | None:
     api_key = os.environ.get("OPENROUTER_API_KEY")
+    print(f"[summarizer] api_key present: {bool(api_key)}, length: {len(api_key) if api_key else 0}", flush=True)
     if not api_key:
+        print("[summarizer] OPENROUTER_API_KEY not set — skipping debate", flush=True)
         return None
 
     data = _data_block(symbol, company_name, verdict, confidence, factors,
