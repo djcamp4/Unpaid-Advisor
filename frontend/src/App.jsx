@@ -132,8 +132,14 @@ export default function App() {
     }
   }
 
+  function handleCancel() {
+    if (abortRef.current) abortRef.current.abort()
+    setLoading(false)
+  }
+
   async function handleAnalyze(e) {
     e.preventDefault()
+    if (loading) { handleCancel(); return }
     const sym = ticker.trim().toUpperCase()
     if (!sym) return
     runAnalysis(sym)
