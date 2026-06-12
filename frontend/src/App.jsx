@@ -7,6 +7,7 @@ import Fundamentals from './components/Fundamentals'
 import Technical from './components/Technical'
 import News from './components/News'
 import Debate from './components/Debate'
+import StockSelector from './components/StockSelector'
 
 const styles = {
   nav: {
@@ -127,81 +128,83 @@ export default function App() {
     <>
       <nav style={styles.nav}>
         <div style={styles.brand}>Unpaid<span style={styles.brandSpan}>Advisor</span></div>
-        <form style={styles.searchRow} onSubmit={handleAnalyze}>
-          <input
-            style={styles.input}
-            placeholder="Ticker (e.g. AAPL)"
-            value={ticker}
-            onChange={e => setTicker(e.target.value)}
-            disabled={loading}
-          />
-          <button style={styles.btn} type="submit" disabled={loading}>
-            {loading ? 'Analyzing…' : 'Analyze'}
-          </button>
-        </form>
       </nav>
 
       <main style={styles.main}>
-        {error && <div style={styles.errorBox}>Error: {error}</div>}
+        <StockSelector />
 
-        {loading && (
-          <div style={{ padding: '60px 24px', maxWidth: 520, margin: '0 auto' }}>
-            {/* Progress bar */}
-            <div style={{ marginBottom: 36 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: '#718096' }}>
-                  {LOADING_STEPS[loadingStep]?.label}…
-                </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#63b3ed' }}>
-                  {LOADING_STEPS[loadingStep]?.pct}%
-                </span>
-              </div>
-              <div style={{ height: 6, background: '#1e2535', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  borderRadius: 3,
-                  width: `${LOADING_STEPS[loadingStep]?.pct ?? 5}%`,
-                  background: 'linear-gradient(90deg, #3182ce, #63b3ed)',
-                  transition: 'width 1.2s ease',
-                }} />
-              </div>
+        {/* Stock Analysis panel */}
+        <div style={{
+          background: '#161b27',
+          border: '1px solid #2d3748',
+          borderRadius: 14,
+          padding: '24px 28px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', letterSpacing: '-0.3px' }}>Stock Analysis</div>
+              <div style={{ fontSize: 12, color: '#4a5568' }}>Enter a ticker to run a full value &amp; growth analysis</div>
             </div>
+            <form style={styles.searchRow} onSubmit={handleAnalyze}>
+              <input
+                style={styles.input}
+                placeholder="Ticker (e.g. AAPL)"
+                value={ticker}
+                onChange={e => setTicker(e.target.value)}
+                disabled={loading}
+              />
+              <button style={styles.btn} type="submit" disabled={loading}>
+                {loading ? 'Analyzing…' : 'Analyze'}
+              </button>
+            </form>
+          </div>
 
-            {/* Step list */}
-            {LOADING_STEPS.map((s, i) => {
-              const done = i < loadingStep
-              const active = i === loadingStep
-              return (
-                <div key={i} style={{ display: 'flex', gap: 16, marginBottom: 20, opacity: done ? 0.4 : active ? 1 : 0.2 }}>
-                  <div style={{
-                    flexShrink: 0, width: 22, height: 22, borderRadius: '50%', marginTop: 2,
-                    background: done ? '#48bb78' : active ? '#3182ce' : '#2d3748',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, color: '#fff',
-                    boxShadow: active ? '0 0 0 4px rgba(49,130,206,0.25)' : 'none',
-                    transition: 'background 0.4s ease',
-                  }}>
-                    {done ? '✓' : i + 1}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: active ? 700 : 500, color: active ? '#e2e8f0' : '#718096' }}>
-                      {s.label}{active ? '…' : ''}
-                    </div>
-                    {active && (
-                      <div style={{ fontSize: 12, color: '#4a5568', marginTop: 3 }}>{s.detail}</div>
-                    )}
-                  </div>
+          {error && <div style={styles.errorBox}>Error: {error}</div>}
+
+          {loading && (
+            <div style={{ padding: '40px 24px', maxWidth: 520, margin: '0 auto' }}>
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: '#718096' }}>{LOADING_STEPS[loadingStep]?.label}…</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#63b3ed' }}>{LOADING_STEPS[loadingStep]?.pct}%</span>
                 </div>
-              )
-            })}
-          </div>
-        )}
+                <div style={{ height: 6, background: '#1e2535', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 3,
+                    width: `${LOADING_STEPS[loadingStep]?.pct ?? 5}%`,
+                    background: 'linear-gradient(90deg, #3182ce, #63b3ed)',
+                    transition: 'width 1.2s ease',
+                  }} />
+                </div>
+              </div>
+              {LOADING_STEPS.map((s, i) => {
+                const done = i < loadingStep
+                const active = i === loadingStep
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 16, marginBottom: 20, opacity: done ? 0.4 : active ? 1 : 0.2 }}>
+                    <div style={{
+                      flexShrink: 0, width: 22, height: 22, borderRadius: '50%', marginTop: 2,
+                      background: done ? '#48bb78' : active ? '#3182ce' : '#2d3748',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 700, color: '#fff',
+                      boxShadow: active ? '0 0 0 4px rgba(49,130,206,0.25)' : 'none',
+                      transition: 'background 0.4s ease',
+                    }}>
+                      {done ? '✓' : i + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: active ? 700 : 500, color: active ? '#e2e8f0' : '#718096' }}>
+                        {s.label}{active ? '…' : ''}
+                      </div>
+                      {active && <div style={{ fontSize: 12, color: '#4a5568', marginTop: 3 }}>{s.detail}</div>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-        {!loading && !data && !error && (
-          <div style={styles.emptyState}>
-            <div style={styles.emptyTitle}>Enter a ticker symbol to begin</div>
-          </div>
-        )}
+        </div>
 
         {data && (
           <>

@@ -1,8 +1,15 @@
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
+
+import asyncio
+import json
+import os
+
+import httpx
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from analysis.fetcher import (
     fetch_all,
@@ -16,6 +23,7 @@ from analysis.fetcher import (
 )
 from analysis.scorer import run_rules
 from analysis.summarizer import generate_debate
+from analysis.congress_trades import fetch_congressional_purchases
 
 app = FastAPI(title="Unpaid Advisor API", version="1.0.0")
 
@@ -97,3 +105,126 @@ def analyze(symbol: str):
         "verdict": verdict,
         "confidence": confidence,
     }
+
+
+@app.get("/debug-trades")
+async def debug_trades():
+    import httpx
+    from datetime import datetime, timedelta
+
+    api_key = os.getenv("FMP_API_KEY", "")
+    if not api_key:
+        return {"error": "FMP_API_KEY not set in backend/.env"}
+
+    api_key = os.getenv("FMP_API_KEY", "")
+    params = {"page": 0, "limit": 25, "apikey": api_key}
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            sr = await client.get("https://financialmodelingprep.com/stable/senate-latest", params=params)
+            hr = await client.get("https://financialmodelingprep.com/stable/house-latest", params=params)
+        return {
+            "senate_status": sr.status_code,
+            "senate_records": len(sr.json()) if sr.status_code == 200 else 0,
+            "senate_sample": sr.text[:300],
+            "house_status": hr.status_code,
+            "house_records": len(hr.json()) if hr.status_code == 200 else 0,
+            "house_sample": hr.text[:300],
+            "api_key_set": bool(api_key),
+            "api_key_prefix": api_key[:6] if api_key else "none",
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/stock-selector")
+async def stock_selector():
+    """
+    Stream SSE events while scanning recent congressional purchases.
+    Runs each ticker through the full analysis pipeline and returns
+    the first 5 where both the Value and Growth investors say BUY.
+    """
+    polygon_key = os.getenv("POLYGON_API_KEY", "")
+
+    async def event_stream():
+        def sse(obj: dict) -> str:
+            return f"data: {json.dumps(obj)}\n\n"
+
+        yield sse({"type": "status", "message": "Fetching congressional trades…"})
+
+        try:
+            tickers = await fetch_congressional_purchases(days=30)
+        except Exception as e:
+            yield sse({"type": "error", "message": f"Capitol Trades API error: {e}"})
+            return
+
+        if not tickers:
+            yield sse({"type": "error", "message": "No congressional purchases found in the last 10 days."})
+            return
+
+        yield sse({"type": "status", "message": f"Found {len(tickers)} unique tickers. Screening…"})
+
+        results: list[dict] = []
+        checked = 0
+
+        for ticker in tickers:
+            if len(results) >= 5:
+                break
+
+            checked += 1
+            yield sse({"type": "analyzing", "ticker": ticker, "found": len(results), "checked": checked})
+
+            try:
+                data = await asyncio.to_thread(fetch_all, ticker)
+                score_data = await asyncio.to_thread(run_rules, data)
+
+                det = data["details"]
+                company_name = det.get("name") or ticker
+                kpis = await asyncio.to_thread(get_kpis, data)
+                fundamentals = await asyncio.to_thread(get_fundamentals, data)
+
+                debate = await asyncio.to_thread(
+                    lambda: generate_debate(
+                        symbol=ticker,
+                        company_name=company_name,
+                        verdict=score_data["verdict"],
+                        confidence=score_data["confidence"],
+                        factors=score_data["factors"],
+                        rule_results=score_data["rule_results"],
+                        kpis=kpis,
+                        fundamentals=fundamentals,
+                    )
+                )
+
+                if not debate:
+                    continue
+
+                value_ok = (debate.get("value") or {}).get("decision", "").upper() == "BUY"
+                growth_ok = (debate.get("growth") or {}).get("decision", "").upper() == "BUY"
+
+                if value_ok and growth_ok:
+                    branding = det.get("branding") or {}
+                    icon_url = branding.get("icon_url")
+                    if icon_url and polygon_key:
+                        icon_url = f"{icon_url}?apiKey={polygon_key}"
+
+                    stock = {
+                        "symbol": ticker,
+                        "company_name": company_name,
+                        "icon_url": icon_url,
+                        "verdict": debate.get("verdict"),
+                        "confidence": debate.get("confidence"),
+                    }
+                    results.append(stock)
+                    yield sse({"type": "found", "stock": stock, "total": len(results)})
+
+            except Exception:
+                continue  # skip tickers that error out
+
+        yield sse({"type": "complete", "stocks": results})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

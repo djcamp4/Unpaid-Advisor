@@ -67,18 +67,18 @@ export default function Debate({ debate }) {
       {/* Two agent cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <AgentCard
-          label="Growth Investor"
-          icon="🚀"
-          caseText={growth.case}
-          decision={growth.decision}
-          accentColor="#9f7aea"
-        />
-        <AgentCard
           label="Value Investor"
           icon="📊"
           caseText={value.case}
           decision={value.decision}
           accentColor="#63b3ed"
+        />
+        <AgentCard
+          label="Growth Investor"
+          icon="🚀"
+          caseText={growth.case}
+          decision={growth.decision}
+          accentColor="#9f7aea"
         />
       </div>
 

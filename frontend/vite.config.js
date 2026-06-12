@@ -5,8 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/analyze': 'http://localhost:8080',
-      '/health': 'http://localhost:8080',
+      '/analyze': 'http://127.0.0.1:8080',
+      '/health': 'http://127.0.0.1:8080',
+      '/stock-selector': 'http://127.0.0.1:8080',
     },
   },
 })
