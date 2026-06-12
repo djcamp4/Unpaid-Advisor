@@ -104,13 +104,18 @@ export default function App() {
     return () => timers.forEach(clearTimeout)
   }, [loading])
 
-  async function handleAnalyze(e) {
-    e.preventDefault()
-    const sym = ticker.trim().toUpperCase()
-    if (!sym) return
+  // On load, run analysis if ?ticker= is in the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sym = params.get('ticker')?.toUpperCase()
+    if (sym) { setTicker(sym); runAnalysis(sym) }
+  }, [])
+
+  async function runAnalysis(sym) {
     setLoading(true)
     setError(null)
     setData(null)
+    window.history.replaceState(null, '', `?ticker=${sym}`)
     try {
       const result = await analyzeStock(sym)
       setData(result)
@@ -120,6 +125,13 @@ export default function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleAnalyze(e) {
+    e.preventDefault()
+    const sym = ticker.trim().toUpperCase()
+    if (!sym) return
+    runAnalysis(sym)
   }
 
   const pos = data && data.change >= 0
@@ -133,13 +145,7 @@ export default function App() {
       <main style={styles.main}>
         <StockSelector onSelect={sym => {
           setTicker(sym)
-          setData(null)
-          setError(null)
-          setLoading(true)
-          analyzeStock(sym)
-            .then(result => setData(result))
-            .catch(err => setError(err.response?.data?.detail || err.message || 'Unknown error'))
-            .finally(() => setLoading(false))
+          runAnalysis(sym)
           window.scrollTo({ top: document.getElementById('stock-analysis')?.offsetTop - 20, behavior: 'smooth' })
         }} />
 
