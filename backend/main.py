@@ -183,7 +183,9 @@ async def stock_selector():
                 kpis = await asyncio.to_thread(get_kpis, data)
                 fundamentals = await asyncio.to_thread(get_fundamentals, data)
 
-                debate = await asyncio.to_thread(
+                # Run debate in background thread, sending keepalives every 10s
+                # so the SSE connection doesn't drop during long OpenRouter calls
+                debate_task = asyncio.create_task(asyncio.to_thread(
                     lambda: generate_debate(
                         symbol=ticker,
                         company_name=company_name,
@@ -194,7 +196,13 @@ async def stock_selector():
                         kpis=kpis,
                         fundamentals=fundamentals,
                     )
-                )
+                ))
+                while not debate_task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(debate_task), timeout=10)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                debate = debate_task.result()
 
                 if not debate:
                     continue
