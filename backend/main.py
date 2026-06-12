@@ -203,8 +203,7 @@ async def stock_selector():
                 judge_verdict = (debate.get("verdict") or "").upper()
                 value_decision = (debate.get("value") or {}).get("decision", "").upper()
                 growth_decision = (debate.get("growth") or {}).get("decision", "").upper()
-                agent_agrees = value_decision == "BUY" or growth_decision == "BUY"
-                if judge_verdict == "BUY" and agent_agrees:
+                if judge_verdict == "BUY":
                     branding = det.get("branding") or {}
                     icon_url = branding.get("icon_url")
                     if icon_url and polygon_key:
