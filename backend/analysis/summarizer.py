@@ -26,7 +26,7 @@ def _call(messages: list, api_key: str, max_tokens: int = 500) -> str | None:
             _API_URL,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": _MODEL, "messages": messages, "max_tokens": max_tokens},
-            timeout=45,
+            timeout=90,
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip() or None
