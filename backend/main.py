@@ -26,7 +26,7 @@ from analysis.summarizer import generate_debate
 from analysis.congress_trades import (
     fetch_congressional_purchases,
     fetch_congressional_purchase_details,
-    get_ticker_congressional_context,
+    get_ticker_congressional_context_sync,
     format_congress_context,
 )
 
@@ -75,7 +75,7 @@ async def analyze(symbol: str):
     kpis = get_kpis(data)
     fundamentals = get_fundamentals(data)
 
-    congress_ctx = await get_ticker_congressional_context(symbol)
+    congress_ctx = get_ticker_congressional_context_sync(symbol)
     congress_str = format_congress_context(congress_ctx)
 
     debate = generate_debate(

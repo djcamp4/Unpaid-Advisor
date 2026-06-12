@@ -120,6 +120,55 @@ async def get_ticker_congressional_context(ticker: str, days: int = 60) -> dict 
         return None
 
 
+def get_ticker_congressional_context_sync(ticker: str, days: int = 60) -> dict | None:
+    """Synchronous version using requests — safe to call from sync or async endpoints."""
+    import requests as req
+    api_key = os.getenv("FMP_API_KEY", "")
+    if not api_key:
+        return None
+    cutoff = datetime.now().date() - timedelta(days=days)
+    params = {"page": 0, "limit": 25, "apikey": api_key}
+    try:
+        transactions: list[dict] = []
+        for url, chamber in [
+            (f"{FMP_BASE}/senate-latest", "Senate"),
+            (f"{FMP_BASE}/house-latest", "House"),
+        ]:
+            r = req.get(url, params=params, timeout=30)
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data, list):
+                    for tx in data:
+                        tx["_chamber"] = chamber
+                    transactions.extend(data)
+
+        details: dict[str, dict] = {}
+        for tx in transactions:
+            if not _is_purchase(tx):
+                continue
+            tx_date = _parse_date(tx.get("disclosureDate") or tx.get("transactionDate") or "")
+            if tx_date is None or tx_date < cutoff:
+                continue
+            t = _ticker(tx)
+            if not t:
+                continue
+            amount = _parse_amount(tx.get("amount", ""))
+            name = f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip() or "Unknown"
+            if t not in details:
+                details[t] = {"max_amount": 0, "buyers": []}
+            if amount > details[t]["max_amount"]:
+                details[t]["max_amount"] = amount
+            details[t]["buyers"].append({
+                "name": name,
+                "chamber": tx.get("_chamber", "Congress"),
+                "amount": tx.get("amount", "undisclosed"),
+                "date": str(tx_date),
+            })
+        return details.get(ticker.upper())
+    except Exception:
+        return None
+
+
 def format_congress_context(context: dict | None) -> str | None:
     """Format congressional context into a readable string for agent prompts."""
     if not context:
