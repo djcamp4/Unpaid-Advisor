@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { analyzeStock } from './api'
 import Verdict from './components/Verdict'
 import KpiTiles from './components/KpiTiles'
@@ -97,6 +97,7 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
+  const abortRef = useRef(null)
 
   useEffect(() => {
     if (!loading) { setLoadingStep(0); return }
@@ -112,14 +113,18 @@ export default function App() {
   }, [])
 
   async function runAnalysis(sym) {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setError(null)
     setData(null)
     window.history.replaceState(null, '', `?ticker=${sym}`)
     try {
-      const result = await analyzeStock(sym)
+      const result = await analyzeStock(sym, controller.signal)
       setData(result)
     } catch (err) {
+      if (err.name === 'CanceledError' || err.name === 'AbortError') return
       const msg = err.response?.data?.detail || err.message || 'Unknown error'
       setError(msg)
     } finally {
@@ -169,8 +174,8 @@ export default function App() {
                 onChange={e => setTicker(e.target.value)}
                 disabled={loading}
               />
-              <button style={styles.btn} type="submit" disabled={loading}>
-                {loading ? 'Analyzing…' : 'Analyze'}
+              <button style={styles.btn} type="submit">
+                {loading ? 'Cancel' : 'Analyze'}
               </button>
             </form>
           </div>
