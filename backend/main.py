@@ -162,7 +162,7 @@ async def stock_selector():
         yield sse({"type": "status", "message": "Fetching congressional trades…"})
 
         try:
-            trade_details = await fetch_congressional_purchase_details(days=30)
+            trade_details = await fetch_congressional_purchase_details(days=60)
         except Exception as e:
             yield sse({"type": "error", "message": f"Capitol Trades API error: {e}"})
             return

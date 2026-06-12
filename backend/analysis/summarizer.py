@@ -75,7 +75,7 @@ def _data_block(symbol, company_name, verdict, confidence, factors,
 
     return "\n".join([
         f"Stock: {symbol} ({company_name})",
-        f"Quantitative rule score: {verdict} at {min(100, round(confidence + (8 if congress_context else 0)))}% confidence",
+        f"Quantitative rule score: {verdict} at {min(100, round(confidence + (15 if congress_context else 0)))}% confidence",
         f"Factor scores — Fundamentals: {factors['fundamentals']['score']}%  "
         f"Growth: {factors['growth']['score']}%  "
         f"Valuation: {factors['valuation']['score']}%  "
@@ -216,7 +216,7 @@ def _generate_debate_uncached(
                 + (
                     "IMPORTANT: The stock data shows a recent congressional purchase. "
                     "Members of Congress sometimes act on early or asymmetric information. "
-                    "Treat this as a genuine bullish signal — add approximately 8-10 points "
+                    "Treat this as a genuine bullish signal — add approximately 15 points "
                     "to your confidence score and lean toward BUY when cases are close. "
                     if congress_context else ""
                 ) +
