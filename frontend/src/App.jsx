@@ -180,7 +180,7 @@ export default function App() {
                 onChange={e => setTicker(e.target.value)}
                 disabled={loading}
               />
-              <button style={styles.btn} type="submit">
+              <button style={{ ...styles.btn, ...(loading ? { background: '#c53030' } : {}) }} type="submit">
                 {loading ? 'Cancel' : 'Analyze'}
               </button>
             </form>
