@@ -9,44 +9,43 @@ Returns None gracefully if API key is missing or any call fails.
 import os
 import re
 import time
-import requests
+import anthropic
 
-_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-_MODEL = "anthropic/claude-opus-4"
+_MODEL = "claude-opus-4-8"
 
 # Cache debate results for 2 hours so repeated runs of the same symbol
 # (e.g. stock selector + manual analysis) return consistent verdicts.
 _debate_cache: dict[str, tuple[float, dict]] = {}
 _CACHE_TTL = 7200  # seconds
 
-
 _MAX_RETRIES = 3
-_RETRY_CAP = 20  # seconds — cap any Retry-After header so one slow call can't block forever
+_RETRY_CAP = 20  # seconds
 
 
 def _call(messages: list, api_key: str, max_tokens: int = 500) -> str | None:
+    system = next((m["content"] for m in messages if m["role"] == "system"), "")
+    user_messages = [m for m in messages if m["role"] != "system"]
+    client = anthropic.Anthropic(api_key=api_key)
+
     for attempt in range(_MAX_RETRIES):
         try:
-            resp = requests.post(
-                _API_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": _MODEL, "messages": messages, "max_tokens": max_tokens},
-                timeout=90,
+            resp = client.messages.create(
+                model=_MODEL,
+                max_tokens=max_tokens,
+                system=system,
+                messages=user_messages,
             )
-            if resp.status_code == 429:
-                wait = min(int(resp.headers.get("Retry-After", 5 * (attempt + 1))), _RETRY_CAP)
-                print(f"[summarizer] Rate limited (429), waiting {wait}s (attempt {attempt + 1}/{_MAX_RETRIES})", flush=True)
-                if attempt < _MAX_RETRIES - 1:
-                    time.sleep(wait)
-                    continue
-                print(f"[summarizer] Exhausted retries on 429. Body: {resp.text[:300]}", flush=True)
-                return None
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip() or None
+            return resp.content[0].text.strip() or None
+        except anthropic.RateLimitError:
+            wait = min(5 * (attempt + 1), _RETRY_CAP)
+            print(f"[summarizer] Rate limited, waiting {wait}s (attempt {attempt + 1}/{_MAX_RETRIES})", flush=True)
+            if attempt < _MAX_RETRIES - 1:
+                time.sleep(wait)
+                continue
+            print("[summarizer] Exhausted retries on rate limit", flush=True)
+            return None
         except Exception as e:
-            print(f"[summarizer] OpenRouter call failed: {e}", flush=True)
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"[summarizer] Response body: {e.response.text[:500]}", flush=True)
+            print(f"[summarizer] Anthropic call failed: {e}", flush=True)
             return None
     return None
 
@@ -148,10 +147,10 @@ def _generate_debate_uncached(
     fundamentals: dict,
     congress_context: str | None = None,
 ) -> dict | None:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     print(f"[summarizer] api_key present: {bool(api_key)}, length: {len(api_key) if api_key else 0}", flush=True)
     if not api_key:
-        print("[summarizer] OPENROUTER_API_KEY not set — skipping debate", flush=True)
+        print("[summarizer] ANTHROPIC_API_KEY not set — skipping debate", flush=True)
         return None
 
     data = _data_block(symbol, company_name, verdict, confidence, factors,

@@ -32,7 +32,7 @@ steps:
       - --min-instances=0
       - --max-instances=10
       - --timeout=300
-      - --set-secrets=OPENROUTER_API_KEY=openrouter-api-key:latest,POLYGON_API_KEY=polygon-api-key:latest
+      - --set-secrets=ANTHROPIC_API_KEY=Anthropic_API:latest,POLYGON_API_KEY=polygon-api-key:latest
     id: cloud-run-deploy
     waitFor: ['docker-push']
 
