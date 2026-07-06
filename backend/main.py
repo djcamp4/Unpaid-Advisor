@@ -195,6 +195,10 @@ async def stock_selector():
 
                 score_data = await asyncio.to_thread(run_rules, data)
 
+                # Skip debate for tickers the rule engine already rates confidently bad
+                if score_data["verdict"] == "DON'T BUY" and score_data["confidence"] >= 60:
+                    continue
+
                 det = data["details"]
                 company_name = det.get("name") or ticker
                 kpis = await asyncio.to_thread(get_kpis, data)
