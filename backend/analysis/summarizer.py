@@ -200,6 +200,9 @@ def _generate_debate_uncached(
                 "Evaluate the stock FIRST on growth fundamentals, THEN briefly note where you disagree "
                 "with the value investor's framing if they were too conservative. "
                 "Write exactly 2 paragraphs, around 80-100 words total. Be direct, opinionated, and specific. "
+                "Your DECISION must match your analysis: if your paragraphs are bullish, you MUST say BUY. "
+                "Only say HOLD if you identified a specific concern that gives you genuine pause. "
+                "A growth investor who writes a positive case and then says HOLD is contradicting themselves. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
