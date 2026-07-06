@@ -20,21 +20,35 @@ _debate_cache: dict[str, tuple[float, dict]] = {}
 _CACHE_TTL = 7200  # seconds
 
 
+_MAX_RETRIES = 3
+_RETRY_CAP = 20  # seconds — cap any Retry-After header so one slow call can't block forever
+
+
 def _call(messages: list, api_key: str, max_tokens: int = 500) -> str | None:
-    try:
-        resp = requests.post(
-            _API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": _MODEL, "messages": messages, "max_tokens": max_tokens},
-            timeout=90,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip() or None
-    except Exception as e:
-        print(f"[summarizer] OpenRouter call failed: {e}", flush=True)
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"[summarizer] Response body: {e.response.text[:500]}", flush=True)
-        return None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            resp = requests.post(
+                _API_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": _MODEL, "messages": messages, "max_tokens": max_tokens},
+                timeout=90,
+            )
+            if resp.status_code == 429:
+                wait = min(int(resp.headers.get("Retry-After", 5 * (attempt + 1))), _RETRY_CAP)
+                print(f"[summarizer] Rate limited (429), waiting {wait}s (attempt {attempt + 1}/{_MAX_RETRIES})", flush=True)
+                if attempt < _MAX_RETRIES - 1:
+                    time.sleep(wait)
+                    continue
+                print(f"[summarizer] Exhausted retries on 429. Body: {resp.text[:300]}", flush=True)
+                return None
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip() or None
+        except Exception as e:
+            print(f"[summarizer] OpenRouter call failed: {e}", flush=True)
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"[summarizer] Response body: {e.response.text[:500]}", flush=True)
+            return None
+    return None
 
 
 def _extract_decision(text: str, tag: str) -> str:
