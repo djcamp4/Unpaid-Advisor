@@ -167,6 +167,13 @@ def _generate_debate_uncached(
                 "You are skeptical of hype and growth-at-any-price thinking. "
                 "Some metrics may show N/A — ignore missing fields and evaluate based on what is available. "
                 "Never cite missing data as a reason to oppose a stock. "
+                + (
+                    "A member of Congress recently purchased this stock. Even as a value investor, "
+                    "treat this as a meaningful signal — congressional members sometimes act on "
+                    "early or asymmetric information not yet reflected in public metrics. "
+                    "Give this signal genuine weight alongside the fundamentals. "
+                    if congress_context else ""
+                ) +
                 "Write exactly 2 paragraphs, around 80-100 words total. Be direct and specific. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
