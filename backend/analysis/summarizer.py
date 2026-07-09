@@ -136,6 +136,194 @@ def generate_debate(
     return result
 
 
+# ── Stock selector: pitch + ranking flow ─────────────────────────────────────
+
+_pitches_cache: dict[str, tuple[float, dict]] = {}
+
+
+def generate_stock_pitches(
+    symbol: str,
+    company_name: str,
+    verdict: str,
+    confidence: float,
+    factors: dict,
+    rule_results: list,
+    kpis: dict,
+    fundamentals: dict,
+    congress_context: str | None = None,
+) -> dict | None:
+    """
+    Have value and growth investors argue FOR this stock.
+    Returns {value_case, growth_case} or None on failure.
+    Used by the stock selector ranking flow.
+    """
+    cached = _pitches_cache.get(symbol)
+    if cached and time.time() - cached[0] < _CACHE_TTL:
+        return cached[1]
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+
+    data = _data_block(symbol, company_name, verdict, confidence, factors,
+                       rule_results, kpis, fundamentals, congress_context)
+
+    congress_note = (
+        "A member of Congress recently purchased this stock. "
+        "Treat this as a meaningful bullish signal — congressional members sometimes "
+        "act on early or asymmetric information. Give this genuine weight. "
+        if congress_context else ""
+    )
+
+    value_raw = _call([
+        {
+            "role": "system",
+            "content": (
+                "You are a disciplined value investor in the tradition of Warren Buffett, "
+                "Benjamin Graham, and Peter Lynch. You focus on margin of safety, durable "
+                "competitive advantages, consistent earnings, low debt, and reasonable valuations. "
+                "Some metrics may show N/A — ignore missing fields and evaluate on what is available. "
+                + congress_note +
+                "Make the strongest investment case FOR this stock from a value perspective. "
+                "Write exactly 2 paragraphs, 80-100 words total. Be direct and specific."
+            ),
+        },
+        {"role": "user", "content": f"Make the value investing case for this stock:\n\n{data}"},
+    ], api_key, max_tokens=180)
+
+    if not value_raw:
+        return None
+
+    growth_raw = _call([
+        {
+            "role": "system",
+            "content": (
+                "You are an aggressive growth investor focused on revenue trajectory, "
+                "total addressable market, competitive moat, and future earnings power. "
+                "Some metrics may show N/A — ignore missing fields and evaluate on what is available. "
+                + congress_note +
+                "Make the strongest investment case FOR this stock from a growth perspective. "
+                "Write exactly 2 paragraphs, 80-100 words total. Be direct and specific."
+            ),
+        },
+        {"role": "user", "content": f"Make the growth investing case for this stock:\n\n{data}"},
+    ], api_key, max_tokens=180)
+
+    if not growth_raw:
+        return None
+
+    result = {"value_case": value_raw, "growth_case": growth_raw}
+    _pitches_cache[symbol] = (time.time(), result)
+    return result
+
+
+def rank_stocks(candidates: list[dict]) -> list[dict]:
+    """
+    Judge selects the top 5 stocks from candidates.
+    Each candidate needs: ticker, company_name, rule_score, score_data (with factors),
+    value_case, growth_case, and optionally congress_context.
+    Returns [{symbol, rank, confidence, rationale}] sorted rank 1–5.
+    Falls back to rule score order if the API call fails.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+    def fallback():
+        return [
+            {"symbol": c["ticker"], "rank": i + 1, "confidence": round(c.get("rule_score", 50)), "rationale": ""}
+            for i, c in enumerate(candidates[:5])
+        ]
+
+    if not api_key or not candidates:
+        return fallback()
+
+    entries = []
+    for i, c in enumerate(candidates, 1):
+        ticker = c["ticker"]
+        company = c.get("company_name", ticker)
+        factors = c.get("score_data", {}).get("factors", {})
+        rule_score = round(c.get("rule_score", 0))
+        ctx = c.get("congress_context") or ""
+
+        entry = (
+            f"Stock {i}: {ticker} ({company})\n"
+            f"Rule score: {rule_score}% | "
+            f"Fundamentals: {factors.get('fundamentals', {}).get('score', '?')}% | "
+            f"Growth: {factors.get('growth', {}).get('score', '?')}% | "
+            f"Valuation: {factors.get('valuation', {}).get('score', '?')}% | "
+            f"Technical: {factors.get('technical', {}).get('score', '?')}%"
+            + (f"\nCongressional purchase: {ctx}" if ctx else "") + "\n"
+            f"Value case: {c.get('value_case', 'N/A')}\n"
+            f"Growth case: {c.get('growth_case', 'N/A')}"
+        )
+        entries.append(entry)
+
+    n = len(candidates)
+    judge_raw = _call([
+        {
+            "role": "system",
+            "content": (
+                "You are a senior investment analyst making final stock picks from a pre-screened list. "
+                "Value and growth investors have argued the case FOR each stock. "
+                "Select the 5 BEST stocks and rank them 1 (best) through 5. "
+                "Favor strong rule scores, compelling investment cases, and congressional purchase signals. "
+                "\n\n"
+                "Use EXACTLY this format — 5 entries, no other text:\n\n"
+                "#1 TICKER | XX%\n"
+                "2-3 sentence rationale.\n\n"
+                "#2 TICKER | XX%\n"
+                "2-3 sentence rationale.\n\n"
+                "#3 TICKER | XX%\n"
+                "2-3 sentence rationale.\n\n"
+                "#4 TICKER | XX%\n"
+                "2-3 sentence rationale.\n\n"
+                "#5 TICKER | XX%\n"
+                "2-3 sentence rationale."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"From these {n} candidate stocks, select your top 5:\n\n" + "\n\n".join(entries),
+        },
+    ], api_key, max_tokens=700)
+
+    if not judge_raw:
+        print("[summarizer] rank_stocks: judge call failed, using rule score fallback", flush=True)
+        return fallback()
+
+    pattern = re.compile(r'#(\d)\s+([A-Z]{1,5})\s*\|\s*(\d+)%[^\n]*\n(.*?)(?=\n#\d|\Z)', re.DOTALL)
+    matches = pattern.findall(judge_raw)
+
+    ticker_set = {c["ticker"] for c in candidates}
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    for rank_str, ticker, conf_str, rationale in matches:
+        ticker = ticker.strip().upper()
+        if ticker not in ticker_set or ticker in seen:
+            continue
+        seen.add(ticker)
+        results.append({
+            "symbol": ticker,
+            "rank": int(rank_str),
+            "confidence": min(float(conf_str), 100.0),
+            "rationale": rationale.strip(),
+        })
+
+    for c in candidates:
+        if len(results) >= 5:
+            break
+        if c["ticker"] not in seen:
+            seen.add(c["ticker"])
+            results.append({
+                "symbol": c["ticker"],
+                "rank": len(results) + 1,
+                "confidence": round(c.get("rule_score", 50)),
+                "rationale": "",
+            })
+
+    return results[:5]
+
+
 def _generate_debate_uncached(
     symbol: str,
     company_name: str,

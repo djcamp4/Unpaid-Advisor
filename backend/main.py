@@ -22,7 +22,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
-from analysis.summarizer import generate_debate
+from analysis.summarizer import generate_debate, generate_stock_pitches, rank_stocks
 from analysis.congress_trades import (
     fetch_congressional_purchases,
     fetch_congressional_purchase_details,
@@ -151,11 +151,12 @@ async def debug_trades():
 @app.get("/stock-selector")
 async def stock_selector():
     """
-    Two-phase stock selector:
-      Phase 1 — Rule engine pre-screen: fetch all congressional purchase tickers
-                and score each with the quantitative rule engine (fast, no AI).
-      Phase 2 — AI debate: run the 3-agent debate only on the top 20 by rule score.
-    Returns up to 5 picks sorted by AI confidence.
+    Three-phase stock selector:
+      Phase 1 — Fetch congressional purchase tickers (FMP API).
+      Phase 2 — Rule engine pre-screen in parallel batches of 5; take top 20.
+      Phase 3 — Value + growth investors argue FOR each of the 20 (parallel, semaphore 5).
+      Phase 4 — Judge picks the 5 best stocks, ranked in order of preference.
+    Always returns exactly 5 stocks.
     """
     polygon_key = os.getenv("POLYGON_API_KEY", "")
 
@@ -163,7 +164,7 @@ async def stock_selector():
         def sse(obj: dict) -> str:
             return f"data: {json.dumps(obj)}\n\n"
 
-        # ── Phase 1: fetch congressional purchases ──────────────────────────────
+        # ── Phase 1: fetch congressional purchases ────────────────────────────
         yield sse({"type": "status", "message": "Fetching congressional trades…"})
         try:
             trade_details = await fetch_congressional_purchase_details(days=60)
@@ -176,92 +177,123 @@ async def stock_selector():
             return
 
         tickers = [t for t, d in sorted(trade_details.items(), key=lambda x: x[1]["max_amount"], reverse=True)]
-        yield sse({"type": "status", "message": f"Found {len(tickers)} purchase tickers. Running rule engine pre-screen…"})
+        yield sse({"type": "status", "message": f"Found {len(tickers)} purchase tickers. Running rule engine…"})
 
-        # ── Phase 2: rule engine pre-screen (all tickers, no AI) ────────────────
+        # ── Phase 2: rule engine (parallel batches of 5) ─────────────────────
+        def fetch_and_score(ticker: str):
+            data = fetch_all(ticker)
+            return ticker, data, run_rules(data)
+
+        BATCH = 5
         candidates: list[dict] = []
-        for i, ticker in enumerate(tickers):
-            yield sse({"type": "status", "message": f"Rule engine: {ticker} ({i + 1}/{len(tickers)})…"})
-            try:
-                data = await asyncio.to_thread(fetch_all, ticker)
-                score_data = run_rules(data)
+        for i in range(0, len(tickers), BATCH):
+            batch = tickers[i:i + BATCH]
+            end = min(i + BATCH, len(tickers))
+            yield sse({"type": "status", "message": f"Rule engine: {i + 1}–{end} of {len(tickers)}…"})
+            batch_results = await asyncio.gather(
+                *[asyncio.to_thread(fetch_and_score, t) for t in batch],
+                return_exceptions=True,
+            )
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    continue
+                ticker, data, score_data = result
                 det = data["details"]
                 candidates.append({
                     "ticker":       ticker,
                     "rule_score":   score_data["confidence"],
                     "score_data":   score_data,
-                    "data":         data,
                     "det":          det,
                     "company_name": det.get("name") or ticker,
                     "kpis":         get_kpis(data),
                     "fundamentals": get_fundamentals(data),
                 })
-            except Exception:
-                continue
 
         if not candidates:
             yield sse({"type": "error", "message": "Could not fetch data for any congressional pick."})
             return
 
-        # Sort by rule score, take top 20 for AI debate
         candidates.sort(key=lambda c: c["rule_score"], reverse=True)
         top = candidates[:20]
-        yield sse({"type": "status", "message": f"Rule engine done. AI debate on top {len(top)} candidates…"})
+        ticker_to_candidate = {c["ticker"]: c for c in top}
+        yield sse({"type": "status", "message": f"Rule engine done. AI building cases for top {len(top)} stocks…"})
 
-        # ── Phase 3: AI debate on top candidates ────────────────────────────────
-        ai_results: list[dict] = []
-        for i, c in enumerate(top):
-            ticker       = c["ticker"]
-            company_name = c["company_name"]
-            score_data   = c["score_data"]
-            kpis         = c["kpis"]
-            fundamentals = c["fundamentals"]
-            congress_str = format_congress_context(trade_details.get(ticker))
+        # ── Phase 3: parallel pitch generation (semaphore 5) ─────────────────
+        sem = asyncio.Semaphore(5)
 
-            yield sse({"type": "analyzing", "ticker": ticker, "found": len(ai_results), "checked": i + 1})
+        async def pitch_one(c: dict):
+            ticker = c["ticker"]
+            congress_ctx = format_congress_context(trade_details.get(ticker))
+            async with sem:
+                pitches = await asyncio.to_thread(
+                    generate_stock_pitches,
+                    ticker, c["company_name"],
+                    c["score_data"]["verdict"], c["score_data"]["confidence"],
+                    c["score_data"]["factors"], c["score_data"]["rule_results"],
+                    c["kpis"], c["fundamentals"], congress_ctx,
+                )
+            return ticker, pitches, congress_ctx
 
+        tasks = [asyncio.create_task(pitch_one(c)) for c in top]
+        pitched: list[dict] = []
+
+        for fut in asyncio.as_completed(tasks):
             try:
-                debate_task = asyncio.create_task(asyncio.to_thread(
-                    generate_debate,
-                    ticker, company_name,
-                    score_data["verdict"], score_data["confidence"],
-                    score_data["factors"], score_data["rule_results"],
-                    kpis, fundamentals, congress_str,
-                ))
-                while not debate_task.done():
-                    try:
-                        await asyncio.wait_for(asyncio.shield(debate_task), timeout=10)
-                    except asyncio.TimeoutError:
-                        yield ": keepalive\n\n"
-                debate = debate_task.result()
+                ticker, pitches, congress_ctx = await fut
             except Exception:
                 continue
-
-            if not debate:
-                continue
-
-            judge_verdict  = (debate.get("verdict") or "").upper()
-            value_decision = (debate.get("value") or {}).get("decision", "").upper()
-            growth_decision = (debate.get("growth") or {}).get("decision", "").upper()
-            agent_agrees   = value_decision in ("BUY", "HOLD") or growth_decision in ("BUY", "HOLD")
-
-            if judge_verdict == "BUY" and agent_agrees:
-                branding = c["det"].get("branding") or {}
-                icon_url = branding.get("icon_url")
-                if icon_url and polygon_key:
-                    icon_url = f"{icon_url}?apiKey={polygon_key}"
-                ai_results.append({
-                    "symbol":       ticker,
-                    "company_name": company_name,
-                    "icon_url":     icon_url,
-                    "verdict":      debate.get("verdict"),
-                    "confidence":   debate.get("confidence"),
-                    "rule_score":   c["rule_score"],
+            yield sse({"type": "analyzing", "ticker": ticker, "checked": len(pitched) + 1})
+            if pitches:
+                c = ticker_to_candidate[ticker]
+                pitched.append({
+                    "ticker":          ticker,
+                    "rule_score":      c["rule_score"],
+                    "score_data":      c["score_data"],
+                    "company_name":    c["company_name"],
+                    "kpis":            c["kpis"],
+                    "fundamentals":    c["fundamentals"],
+                    "value_case":      pitches["value_case"],
+                    "growth_case":     pitches["growth_case"],
+                    "congress_context": congress_ctx,
                 })
 
-        # Sort final results by AI confidence, return top 5
-        ai_results.sort(key=lambda r: r.get("confidence") or 0, reverse=True)
-        top_results = ai_results[:5]
+        if not pitched:
+            yield sse({"type": "error", "message": "AI pitch generation failed for all candidates."})
+            return
+
+        pitched.sort(key=lambda c: c["rule_score"], reverse=True)
+        yield sse({"type": "status", "message": f"Judge selecting top 5 from {len(pitched)} stocks…"})
+
+        # ── Phase 4: judge ranks top 5 (keepalive during long call) ──────────
+        judge_task = asyncio.create_task(asyncio.to_thread(rank_stocks, pitched))
+        while not judge_task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(judge_task), timeout=10)
+            except asyncio.TimeoutError:
+                yield ": keepalive\n\n"
+        ranked = judge_task.result()
+
+        # ── Phase 5: assemble and emit results ────────────────────────────────
+        top_results = []
+        for r in ranked:
+            c = ticker_to_candidate.get(r["symbol"])
+            if not c:
+                continue
+            branding = (c.get("det") or {}).get("branding") or {}
+            icon_url = branding.get("icon_url")
+            if icon_url and polygon_key:
+                icon_url = f"{icon_url}?apiKey={polygon_key}"
+            top_results.append({
+                "symbol":       r["symbol"],
+                "company_name": c["company_name"],
+                "icon_url":     icon_url,
+                "verdict":      "BUY",
+                "confidence":   r["confidence"],
+                "rule_score":   c["rule_score"],
+                "rationale":    r.get("rationale", ""),
+                "rank":         r["rank"],
+            })
+
         for stock in top_results:
             yield sse({"type": "found", "stock": stock, "total": len(top_results)})
         yield sse({"type": "complete", "stocks": top_results})
