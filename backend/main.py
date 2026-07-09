@@ -151,9 +151,11 @@ async def debug_trades():
 @app.get("/stock-selector")
 async def stock_selector():
     """
-    Stream SSE events while scanning recent congressional purchases.
-    Runs each ticker through the full analysis pipeline and returns
-    the first 5 where both the Value and Growth investors say BUY.
+    Two-phase stock selector:
+      Phase 1 — Rule engine pre-screen: fetch all congressional purchase tickers
+                and score each with the quantitative rule engine (fast, no AI).
+      Phase 2 — AI debate: run the 3-agent debate only on the top 20 by rule score.
+    Returns up to 5 picks sorted by AI confidence.
     """
     polygon_key = os.getenv("POLYGON_API_KEY", "")
 
@@ -161,8 +163,8 @@ async def stock_selector():
         def sse(obj: dict) -> str:
             return f"data: {json.dumps(obj)}\n\n"
 
+        # ── Phase 1: fetch congressional purchases ──────────────────────────────
         yield sse({"type": "status", "message": "Fetching congressional trades…"})
-
         try:
             trade_details = await fetch_congressional_purchase_details(days=60)
         except Exception as e:
@@ -170,53 +172,61 @@ async def stock_selector():
             return
 
         if not trade_details:
-            yield sse({"type": "error", "message": "No congressional purchases found in the last 30 days."})
+            yield sse({"type": "error", "message": "No congressional purchases found in the last 60 days."})
             return
 
         tickers = [t for t, d in sorted(trade_details.items(), key=lambda x: x[1]["max_amount"], reverse=True)]
-        yield sse({"type": "status", "message": f"Found {len(tickers)} unique tickers. Screening…"})
+        yield sse({"type": "status", "message": f"Found {len(tickers)} purchase tickers. Running rule engine pre-screen…"})
 
-        results: list[dict] = []
-        checked = 0
+        # ── Phase 2: rule engine pre-screen (all tickers, no AI) ────────────────
+        candidates: list[dict] = []
+        for i, ticker in enumerate(tickers):
+            yield sse({"type": "status", "message": f"Rule engine: {ticker} ({i + 1}/{len(tickers)})…"})
+            try:
+                data = await asyncio.to_thread(fetch_all, ticker)
+                score_data = run_rules(data)
+                det = data["details"]
+                candidates.append({
+                    "ticker":       ticker,
+                    "rule_score":   score_data["confidence"],
+                    "score_data":   score_data,
+                    "data":         data,
+                    "det":          det,
+                    "company_name": det.get("name") or ticker,
+                    "kpis":         get_kpis(data),
+                    "fundamentals": get_fundamentals(data),
+                })
+            except Exception:
+                continue
 
-        for ticker in tickers:
-            if len(results) >= 5:
-                break
+        if not candidates:
+            yield sse({"type": "error", "message": "Could not fetch data for any congressional pick."})
+            return
 
-            checked += 1
-            yield sse({"type": "analyzing", "ticker": ticker, "found": len(results), "checked": checked})
+        # Sort by rule score, take top 20 for AI debate
+        candidates.sort(key=lambda c: c["rule_score"], reverse=True)
+        top = candidates[:20]
+        yield sse({"type": "status", "message": f"Rule engine done. AI debate on top {len(top)} candidates…"})
+
+        # ── Phase 3: AI debate on top candidates ────────────────────────────────
+        ai_results: list[dict] = []
+        for i, c in enumerate(top):
+            ticker       = c["ticker"]
+            company_name = c["company_name"]
+            score_data   = c["score_data"]
+            kpis         = c["kpis"]
+            fundamentals = c["fundamentals"]
+            congress_str = format_congress_context(trade_details.get(ticker))
+
+            yield sse({"type": "analyzing", "ticker": ticker, "found": len(ai_results), "checked": i + 1})
 
             try:
-                fetch_task = asyncio.create_task(asyncio.to_thread(fetch_all, ticker))
-                while not fetch_task.done():
-                    try:
-                        await asyncio.wait_for(asyncio.shield(fetch_task), timeout=10)
-                    except asyncio.TimeoutError:
-                        yield ": keepalive\n\n"
-                data = fetch_task.result()
-
-                score_data = await asyncio.to_thread(run_rules, data)
-
-                det = data["details"]
-                company_name = det.get("name") or ticker
-                kpis = await asyncio.to_thread(get_kpis, data)
-                fundamentals = await asyncio.to_thread(get_fundamentals, data)
-
-                # Run debate in background thread, sending keepalives every 10s
-                # so the SSE connection doesn't drop during long OpenRouter calls
-                congress_str = format_congress_context(trade_details.get(ticker))
                 debate_task = asyncio.create_task(asyncio.to_thread(
-                    lambda: generate_debate(
-                        symbol=ticker,
-                        company_name=company_name,
-                        verdict=score_data["verdict"],
-                        confidence=score_data["confidence"],
-                        factors=score_data["factors"],
-                        rule_results=score_data["rule_results"],
-                        kpis=kpis,
-                        fundamentals=fundamentals,
-                        congress_context=congress_str,
-                    )
+                    generate_debate,
+                    ticker, company_name,
+                    score_data["verdict"], score_data["confidence"],
+                    score_data["factors"], score_data["rule_results"],
+                    kpis, fundamentals, congress_str,
                 ))
                 while not debate_task.done():
                     try:
@@ -224,35 +234,37 @@ async def stock_selector():
                     except asyncio.TimeoutError:
                         yield ": keepalive\n\n"
                 debate = debate_task.result()
-
-                if not debate:
-                    continue
-
-                judge_confidence = debate.get("confidence") or 0
-                judge_verdict = (debate.get("verdict") or "").upper()
-                value_decision = (debate.get("value") or {}).get("decision", "").upper()
-                growth_decision = (debate.get("growth") or {}).get("decision", "").upper()
-                agent_agrees = value_decision in ("BUY", "HOLD") or growth_decision in ("BUY", "HOLD")
-                if judge_verdict == "BUY" and agent_agrees:
-                    branding = det.get("branding") or {}
-                    icon_url = branding.get("icon_url")
-                    if icon_url and polygon_key:
-                        icon_url = f"{icon_url}?apiKey={polygon_key}"
-
-                    stock = {
-                        "symbol": ticker,
-                        "company_name": company_name,
-                        "icon_url": icon_url,
-                        "verdict": debate.get("verdict"),
-                        "confidence": debate.get("confidence"),
-                    }
-                    results.append(stock)
-                    yield sse({"type": "found", "stock": stock, "total": len(results)})
-
             except Exception:
-                continue  # skip tickers that error out
+                continue
 
-        yield sse({"type": "complete", "stocks": results})
+            if not debate:
+                continue
+
+            judge_verdict  = (debate.get("verdict") or "").upper()
+            value_decision = (debate.get("value") or {}).get("decision", "").upper()
+            growth_decision = (debate.get("growth") or {}).get("decision", "").upper()
+            agent_agrees   = value_decision in ("BUY", "HOLD") or growth_decision in ("BUY", "HOLD")
+
+            if judge_verdict == "BUY" and agent_agrees:
+                branding = c["det"].get("branding") or {}
+                icon_url = branding.get("icon_url")
+                if icon_url and polygon_key:
+                    icon_url = f"{icon_url}?apiKey={polygon_key}"
+                ai_results.append({
+                    "symbol":       ticker,
+                    "company_name": company_name,
+                    "icon_url":     icon_url,
+                    "verdict":      debate.get("verdict"),
+                    "confidence":   debate.get("confidence"),
+                    "rule_score":   c["rule_score"],
+                })
+
+        # Sort final results by AI confidence, return top 5
+        ai_results.sort(key=lambda r: r.get("confidence") or 0, reverse=True)
+        top_results = ai_results[:5]
+        for stock in top_results:
+            yield sse({"type": "found", "stock": stock, "total": len(top_results)})
+        yield sse({"type": "complete", "stocks": top_results})
 
     return StreamingResponse(
         event_stream(),
