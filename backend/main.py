@@ -118,29 +118,31 @@ async def analyze(symbol: str):
 
 @app.get("/debug-trades")
 async def debug_trades():
-    import httpx
-    from datetime import datetime, timedelta
-
     api_key = os.getenv("FMP_API_KEY", "")
     if not api_key:
         return {"error": "FMP_API_KEY not set in backend/.env"}
 
-    api_key = os.getenv("FMP_API_KEY", "")
-    params = {"page": 0, "limit": 25, "apikey": api_key}
+    params = {"page": 0, "limit": 10, "apikey": api_key}
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             sr = await client.get("https://financialmodelingprep.com/stable/senate-latest", params=params)
             hr = await client.get("https://financialmodelingprep.com/stable/house-latest", params=params)
+
+        senate_data = sr.json() if sr.status_code == 200 else []
+        house_data  = hr.json() if hr.status_code == 200 else []
+
         return {
+            "api_key_set": True,
+            "api_key_prefix": api_key[:6],
             "senate_status": sr.status_code,
-            "senate_records": len(sr.json()) if sr.status_code == 200 else 0,
-            "senate_sample": sr.text[:300],
+            "senate_records": len(senate_data) if isinstance(senate_data, list) else "not-a-list",
+            "senate_first_record": senate_data[0] if isinstance(senate_data, list) and senate_data else None,
+            "senate_first_record_keys": list(senate_data[0].keys()) if isinstance(senate_data, list) and senate_data else [],
             "house_status": hr.status_code,
-            "house_records": len(hr.json()) if hr.status_code == 200 else 0,
-            "house_sample": hr.text[:300],
-            "api_key_set": bool(api_key),
-            "api_key_prefix": api_key[:6] if api_key else "none",
+            "house_records": len(house_data) if isinstance(house_data, list) else "not-a-list",
+            "house_first_record": house_data[0] if isinstance(house_data, list) and house_data else None,
+            "house_first_record_keys": list(house_data[0].keys()) if isinstance(house_data, list) and house_data else [],
         }
     except Exception as e:
         return {"error": str(e)}
