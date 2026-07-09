@@ -71,7 +71,7 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
         )
 
     cutoff = datetime.now().date() - timedelta(days=days)
-    params = {"page": 0, "limit": 50, "apikey": api_key}
+    params = {"page": 0, "limit": 25, "apikey": api_key}
 
     async with httpx.AsyncClient(timeout=30) as client:
         sr = await client.get(f"{FMP_BASE}/senate-latest", params=params)
