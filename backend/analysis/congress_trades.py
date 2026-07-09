@@ -34,18 +34,29 @@ def _parse_date(s: str):
 
 
 def _is_purchase(tx: dict) -> bool:
-    t = (tx.get("type") or "").lower()
-    return "purchase" in t or t == "buy"
+    t = (tx.get("type") or "").lower().strip()
+    return "purchase" in t or t in ("buy", "p")
 
 
 def _ticker(tx: dict) -> str | None:
-    t = (tx.get("symbol") or "").strip().upper()
+    # FMP stable API uses "ticker"; legacy endpoints may use "symbol"
+    t = (tx.get("ticker") or tx.get("symbol") or "").strip().upper()
     if not t or t in ("--", "N/A", "NONE", ""):
         return None
     # Skip funds, bonds, options
     if len(t) > 5 or " " in t or "/" in t or "$" in t:
         return None
     return t
+
+
+def _member_name(tx: dict) -> str:
+    # FMP stable API returns full name as "senator" or "representative"
+    return (
+        tx.get("senator")
+        or tx.get("representative")
+        or f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip()
+        or "Unknown"
+    )
 
 
 async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict]:
@@ -86,7 +97,7 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
         if not ticker:
             continue
         amount = _parse_amount(tx.get("amount", ""))
-        name = f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip() or "Unknown"
+        name = _member_name(tx)
         chamber = tx.get("_chamber", "Congress")
 
         if ticker not in details:
@@ -153,7 +164,7 @@ def get_ticker_congressional_context_sync(ticker: str, days: int = 60) -> dict |
             if not t:
                 continue
             amount = _parse_amount(tx.get("amount", ""))
-            name = f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip() or "Unknown"
+            name = _member_name(tx)
             if t not in details:
                 details[t] = {"max_amount": 0, "buyers": []}
             if amount > details[t]["max_amount"]:
