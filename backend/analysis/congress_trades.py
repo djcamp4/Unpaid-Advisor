@@ -71,25 +71,29 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
         )
 
     cutoff = datetime.now().date() - timedelta(days=days)
-    params = {"page": 0, "limit": 25, "apikey": api_key}
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        sr = await client.get(f"{FMP_BASE}/senate-latest", params=params)
-        hr = await client.get(f"{FMP_BASE}/house-latest", params=params)
 
     transactions: list[dict] = []
-    for resp, chamber, label in [(sr, "Senate", "senate"), (hr, "House", "house")]:
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, list):
-                print(f"[congress] {label}: {len(data)} records", flush=True)
+    async with httpx.AsyncClient(timeout=30) as client:
+        for url, chamber in [
+            (f"{FMP_BASE}/senate-latest", "Senate"),
+            (f"{FMP_BASE}/house-latest", "House"),
+        ]:
+            label = chamber.lower()
+            for page in range(4):  # up to 4 pages × 25 = 100 records per chamber
+                resp = await client.get(url, params={"page": page, "limit": 25, "apikey": api_key})
+                if resp.status_code != 200:
+                    print(f"[congress] {label} p{page}: HTTP {resp.status_code}", flush=True)
+                    break
+                data = resp.json()
+                if not isinstance(data, list):
+                    print(f"[congress] {label} p{page}: non-list response — {str(data)[:200]}", flush=True)
+                    break
+                print(f"[congress] {label} p{page}: {len(data)} records", flush=True)
                 for tx in data:
                     tx["_chamber"] = chamber
                 transactions.extend(data)
-            else:
-                print(f"[congress] {label}: unexpected response type {type(data).__name__}: {str(data)[:200]}", flush=True)
-        else:
-            print(f"[congress] {label}: HTTP {resp.status_code} — {resp.text[:200]}", flush=True)
+                if len(data) < 25:
+                    break  # last page — no point fetching more
 
     print(f"[congress] {len(transactions)} total transactions before filtering (cutoff={cutoff})", flush=True)
 
