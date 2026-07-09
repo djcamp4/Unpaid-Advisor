@@ -71,20 +71,27 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
         )
 
     cutoff = datetime.now().date() - timedelta(days=days)
-    params = {"page": 0, "limit": 100, "apikey": api_key}
+    params = {"page": 0, "limit": 50, "apikey": api_key}
 
     async with httpx.AsyncClient(timeout=30) as client:
         sr = await client.get(f"{FMP_BASE}/senate-latest", params=params)
         hr = await client.get(f"{FMP_BASE}/house-latest", params=params)
 
     transactions: list[dict] = []
-    for resp, chamber in [(sr, "Senate"), (hr, "House")]:
+    for resp, chamber, label in [(sr, "Senate", "senate"), (hr, "House", "house")]:
         if resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):
+                print(f"[congress] {label}: {len(data)} records", flush=True)
                 for tx in data:
                     tx["_chamber"] = chamber
                 transactions.extend(data)
+            else:
+                print(f"[congress] {label}: unexpected response type {type(data).__name__}: {str(data)[:200]}", flush=True)
+        else:
+            print(f"[congress] {label}: HTTP {resp.status_code} — {resp.text[:200]}", flush=True)
+
+    print(f"[congress] {len(transactions)} total transactions before filtering (cutoff={cutoff})", flush=True)
 
     details: dict[str, dict] = {}
     for tx in transactions:
@@ -113,6 +120,7 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
             "date": str(tx_date),
         })
 
+    print(f"[congress] {len(details)} unique tickers after filtering: {list(details.keys())[:10]}", flush=True)
     return details
 
 
