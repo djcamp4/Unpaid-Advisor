@@ -366,6 +366,9 @@ def _generate_debate_uncached(
                 ) +
                 "Write exactly 2 paragraphs. Stay under 120 words total — always end your last "
                 "paragraph with a complete sentence before the decision tag. "
+                "Your DECISION must reflect your analysis: if your paragraphs are positive about this stock, "
+                "say BUY. Only say HOLD if you identified a specific concern that genuinely tempers your view. "
+                "Writing a positive case and then saying HOLD is inconsistent — don't do it. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
