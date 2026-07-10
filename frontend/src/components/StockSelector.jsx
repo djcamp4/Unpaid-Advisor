@@ -152,7 +152,8 @@ export default function StockSelector({ onSelect }) {
   // Close connection on unmount
   useEffect(() => () => { if (cleanupRef.current) cleanupRef.current() }, [])
 
-  const progressPct = phase === 'done' ? 100 : Math.min(95, (found / 5) * 90 + (checked.length > 0 ? 5 : 0))
+  // Progress: 0% idle → 5% once running → scales to 90% as pitch analyses complete → 100% done
+  const progressPct = phase === 'done' ? 100 : Math.min(90, 5 + (checked.length / 20) * 85)
 
   function handleStart() {
     if (phase === 'running') return
