@@ -366,8 +366,9 @@ def _generate_debate_uncached(
                 ) +
                 "Write exactly 2 paragraphs. Stay under 120 words total — always end your last "
                 "paragraph with a complete sentence before the decision tag. "
-                "Your DECISION must reflect your analysis: if your paragraphs are positive about this stock, "
-                "say BUY. Only say HOLD if you identified a specific concern that genuinely tempers your view. "
+                "Your DECISION must reflect your analysis: if your paragraphs are positive, say BUY. "
+                "Only say HOLD if you can name a specific concern in your text (e.g. valuation is stretched, "
+                "debt load is high, margins are deteriorating) — HOLD is not a cautious default. "
                 "Writing a positive case and then saying HOLD is inconsistent — don't do it. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
@@ -403,9 +404,10 @@ def _generate_debate_uncached(
                 "Write exactly 2 paragraphs. Stay under 120 words total — always end your last "
                 "paragraph with a complete sentence before the decision tag. "
                 "Be direct, opinionated, and specific. "
-                "Your DECISION must match your analysis: if your paragraphs are bullish, you MUST say BUY. "
-                "Only say HOLD if you identified a specific concern that gives you genuine pause. "
-                "A growth investor who writes a positive case and then says HOLD is contradicting themselves. "
+                "Your DECISION must match your analysis: if your paragraphs are bullish, say BUY. "
+                "Only say HOLD if you can name a specific concern in your text (e.g. growth is decelerating, "
+                "competition is intensifying, runway is unclear) — HOLD is not a cautious default. "
+                "A growth investor who writes a bullish case and then says HOLD is contradicting themselves. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
