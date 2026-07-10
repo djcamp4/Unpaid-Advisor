@@ -267,7 +267,7 @@ export default function StockSelector({ onSelect }) {
 
       {phase === 'running' && (
         <div style={s.progressWrap}>
-          <div style={s.statusLine}>{statusMsg} &nbsp;·&nbsp; {found}/5 found</div>
+          <div style={s.statusLine}>{statusMsg}</div>
           <div style={s.progressBar}>
             <div style={s.progressFill(progressPct)} />
           </div>
