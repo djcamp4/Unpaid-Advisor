@@ -185,7 +185,8 @@ def generate_stock_pitches(
                 "Some metrics may show N/A — ignore missing fields and evaluate on what is available. "
                 + congress_note +
                 "Make the strongest investment case FOR this stock from a value perspective. "
-                "Write exactly 2 paragraphs, 80-100 words total. Be direct and specific."
+                "Write exactly 2 paragraphs, under 120 words total. Be direct and specific. "
+                "Always end with a complete sentence."
             ),
         },
         {"role": "user", "content": f"Make the value investing case for this stock:\n\n{data}"},
@@ -203,7 +204,8 @@ def generate_stock_pitches(
                 "Some metrics may show N/A — ignore missing fields and evaluate on what is available. "
                 + congress_note +
                 "Make the strongest investment case FOR this stock from a growth perspective. "
-                "Write exactly 2 paragraphs, 80-100 words total. Be direct and specific."
+                "Write exactly 2 paragraphs, under 120 words total. Be direct and specific. "
+                "Always end with a complete sentence."
             ),
         },
         {"role": "user", "content": f"Make the growth investing case for this stock:\n\n{data}"},
@@ -362,7 +364,8 @@ def _generate_debate_uncached(
                     "Give this signal genuine weight alongside the fundamentals. "
                     if congress_context else ""
                 ) +
-                "Write exactly 2 paragraphs, around 80-100 words total. Be direct and specific. "
+                "Write exactly 2 paragraphs. Stay under 120 words total — always end your last "
+                "paragraph with a complete sentence before the decision tag. "
                 "End with exactly: DECISION: BUY  or  DECISION: HOLD  or  DECISION: DON'T BUY"
             ),
         },
@@ -394,7 +397,9 @@ def _generate_debate_uncached(
                 ) +
                 "Evaluate the stock FIRST on growth fundamentals, THEN briefly note where you disagree "
                 "with the value investor's framing if they were too conservative. "
-                "Write exactly 2 paragraphs, around 80-100 words total. Be direct, opinionated, and specific. "
+                "Write exactly 2 paragraphs. Stay under 120 words total — always end your last "
+                "paragraph with a complete sentence before the decision tag. "
+                "Be direct, opinionated, and specific. "
                 "Your DECISION must match your analysis: if your paragraphs are bullish, you MUST say BUY. "
                 "Only say HOLD if you identified a specific concern that gives you genuine pause. "
                 "A growth investor who writes a positive case and then says HOLD is contradicting themselves. "
@@ -431,16 +436,12 @@ def _generate_debate_uncached(
                     "to your confidence score and lean toward BUY when cases are close. "
                     if congress_context else ""
                 ) +
-                "Produce:\n"
-                "1. A 3-5 sentence plain-English summary of the key takeaways for an investor.\n"
-                "2. A confidence score (0-100%) reflecting how clear-cut the decision is — "
-                "high confidence means the evidence strongly points one way; "
-                "low confidence means the two cases are evenly matched.\n"
-                "3. A final verdict.\n\n"
+                "Produce a plain-English summary of 3-5 sentences (under 150 words). "
                 "Do not open with clichés or framing phrases like 'this is a classic', "
                 "'this stock presents', 'the debate here', or any similar setup line. "
                 "Start directly with the most important observation about the stock. "
-                "End your response with exactly these two lines (no other text after them):\n"
+                "Always end your summary with a complete sentence. "
+                "Then append exactly these two lines (no other text after them):\n"
                 "CONFIDENCE: XX%\n"
                 "FINAL VERDICT: BUY  or  FINAL VERDICT: HOLD  or  FINAL VERDICT: DON'T BUY"
             ),
