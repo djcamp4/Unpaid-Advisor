@@ -61,8 +61,9 @@ def _member_name(tx: dict) -> str:
 
 async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict]:
     """
-    Return {ticker: {max_amount, buyers: [{name, chamber, amount, date}]}}
-    sorted by max_amount descending.
+    Return {ticker: {max_amount, buyers: [{name, chamber, amount, date}]}}.
+    Paginates both chambers until at least 25 unique valid tickers are found
+    or all pages are exhausted (max 10 pages × 25 = 250 records per chamber).
     """
     api_key = os.getenv("FMP_API_KEY", "")
     if not api_key:
@@ -71,15 +72,23 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
         )
 
     cutoff = datetime.now().date() - timedelta(days=days)
+    TARGET = 25
+    MAX_PAGES = 10
 
-    transactions: list[dict] = []
+    details: dict[str, dict] = {}
+
     async with httpx.AsyncClient(timeout=30) as client:
         for url, chamber in [
             (f"{FMP_BASE}/senate-latest", "Senate"),
             (f"{FMP_BASE}/house-latest", "House"),
         ]:
+            if len(details) >= TARGET:
+                break
             label = chamber.lower()
-            for page in range(4):  # up to 4 pages × 25 = 100 records per chamber
+            for page in range(MAX_PAGES):
+                if len(details) >= TARGET:
+                    print(f"[congress] reached {TARGET} tickers — stopping {label} pagination", flush=True)
+                    break
                 resp = await client.get(url, params={"page": page, "limit": 25, "apikey": api_key})
                 if resp.status_code != 200:
                     print(f"[congress] {label} p{page}: HTTP {resp.status_code}", flush=True)
@@ -88,41 +97,33 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
                 if not isinstance(data, list):
                     print(f"[congress] {label} p{page}: non-list response — {str(data)[:200]}", flush=True)
                     break
-                print(f"[congress] {label} p{page}: {len(data)} records", flush=True)
+                print(f"[congress] {label} p{page}: {len(data)} records (have {len(details)} tickers so far)", flush=True)
+
                 for tx in data:
-                    tx["_chamber"] = chamber
-                transactions.extend(data)
+                    if not _is_purchase(tx):
+                        continue
+                    tx_date = _parse_date(tx.get("disclosureDate") or tx.get("transactionDate") or "")
+                    if tx_date is None or tx_date < cutoff:
+                        continue
+                    ticker = _ticker(tx)
+                    if not ticker:
+                        continue
+                    amount = _parse_amount(tx.get("amount", ""))
+                    name = _member_name(tx)
+
+                    if ticker not in details:
+                        details[ticker] = {"max_amount": 0, "buyers": []}
+                    if amount > details[ticker]["max_amount"]:
+                        details[ticker]["max_amount"] = amount
+                    details[ticker]["buyers"].append({
+                        "name": name,
+                        "chamber": chamber,
+                        "amount": tx.get("amount", "undisclosed"),
+                        "date": str(tx_date),
+                    })
+
                 if len(data) < 25:
-                    break  # last page — no point fetching more
-
-    print(f"[congress] {len(transactions)} total transactions before filtering (cutoff={cutoff})", flush=True)
-
-    details: dict[str, dict] = {}
-    for tx in transactions:
-        if not _is_purchase(tx):
-            continue
-        tx_date = _parse_date(tx.get("disclosureDate") or tx.get("transactionDate") or "")
-        if tx_date is None or tx_date < cutoff:
-            continue
-        ticker = _ticker(tx)
-        if not ticker:
-            continue
-        amount = _parse_amount(tx.get("amount", ""))
-        name = _member_name(tx)
-        chamber = tx.get("_chamber", "Congress")
-
-        if ticker not in details:
-            details[ticker] = {"max_amount": 0, "buyers": []}
-
-        if amount > details[ticker]["max_amount"]:
-            details[ticker]["max_amount"] = amount
-
-        details[ticker]["buyers"].append({
-            "name": name,
-            "chamber": chamber,
-            "amount": tx.get("amount", "undisclosed"),
-            "date": str(tx_date),
-        })
+                    break  # last page — no more to fetch
 
     print(f"[congress] {len(details)} unique tickers after filtering: {list(details.keys())[:10]}", flush=True)
     return details
