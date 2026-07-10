@@ -189,7 +189,7 @@ def generate_stock_pitches(
             ),
         },
         {"role": "user", "content": f"Make the value investing case for this stock:\n\n{data}"},
-    ], api_key, max_tokens=180)
+    ], api_key, max_tokens=350)
 
     if not value_raw:
         return None
@@ -207,7 +207,7 @@ def generate_stock_pitches(
             ),
         },
         {"role": "user", "content": f"Make the growth investing case for this stock:\n\n{data}"},
-    ], api_key, max_tokens=180)
+    ], api_key, max_tokens=350)
 
     if not growth_raw:
         return None
@@ -367,7 +367,7 @@ def _generate_debate_uncached(
             ),
         },
         {"role": "user", "content": f"Analyze this stock from a value investing perspective:\n\n{data}"},
-    ], api_key, max_tokens=200)
+    ], api_key, max_tokens=400)
 
     if not value_raw:
         return None
@@ -409,7 +409,7 @@ def _generate_debate_uncached(
                 "Give your independent growth investing verdict. Lead with growth metrics, not value metrics."
             ),
         },
-    ], api_key, max_tokens=200)
+    ], api_key, max_tokens=400)
 
     if not growth_raw:
         return None
@@ -454,7 +454,7 @@ def _generate_debate_uncached(
                 "Weigh both cases and deliver your verdict."
             ),
         },
-    ], api_key, max_tokens=400)
+    ], api_key, max_tokens=700)
 
     if not judge_raw:
         return None
