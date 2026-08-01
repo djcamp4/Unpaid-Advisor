@@ -97,6 +97,7 @@ async def analyze(symbol: str):
     return {
         "symbol": symbol,
         "company_name": company_name,
+        "description": det.get("description") or "",
         "exchange": exchange,
         "sector": sector,
         "industry": sector,

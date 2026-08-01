@@ -250,6 +250,13 @@ export default function App() {
               )}
             </div>
 
+            {/* Company description */}
+            {data.description && (
+              <div style={{ fontSize: 13, color: '#718096', lineHeight: 1.6, maxWidth: 860 }}>
+                {data.description}
+              </div>
+            )}
+
             {/* Rule-based verdict bar */}
             <Verdict
               verdict={data.verdict}
