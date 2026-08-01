@@ -253,9 +253,7 @@ export default function App() {
             {/* Company description */}
             {data.description && (
               <div style={{ fontSize: 13, color: '#718096', lineHeight: 1.6, maxWidth: 860 }}>
-                {data.description.length > 500
-                  ? data.description.slice(0, 500).trimEnd() + '…'
-                  : data.description}
+                {data.description}
               </div>
             )}
 
