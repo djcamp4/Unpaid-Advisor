@@ -168,16 +168,17 @@ async def stock_selector():
         # ── Phase 1: fetch congressional purchases ────────────────────────────
         yield sse({"type": "status", "message": "Fetching congressional trades…"})
         try:
-            trade_details = await fetch_congressional_purchase_details(days=60)
+            trade_details = await fetch_congressional_purchase_details(days=90)
         except Exception as e:
             yield sse({"type": "error", "message": f"Capitol Trades API error: {e}"})
             return
 
         if not trade_details:
-            yield sse({"type": "error", "message": "No congressional purchases found in the last 60 days."})
+            yield sse({"type": "error", "message": "No congressional purchases found in the last 90 days."})
             return
 
         tickers = [t for t, d in sorted(trade_details.items(), key=lambda x: x[1]["max_amount"], reverse=True)]
+        print(f"[selector] phase1: {len(tickers)} unique tickers from FMP — {tickers[:10]}", flush=True)
         yield sse({"type": "status", "message": f"Found {len(tickers)} purchase tickers. Running rule engine…"})
 
         # ── Phase 2: rule engine (parallel batches of 5) ─────────────────────
@@ -217,6 +218,7 @@ async def stock_selector():
         candidates.sort(key=lambda c: c["rule_score"], reverse=True)
         top = candidates[:20]
         ticker_to_candidate = {c["ticker"]: c for c in top}
+        print(f"[selector] phase2: {len(candidates)} rule-engine successes → top {len(top)}: {[c['ticker'] for c in top]}", flush=True)
         yield sse({"type": "status", "message": f"Rule engine done. AI building cases for top {len(top)} stocks…"})
 
         # ── Phase 3: parallel pitch generation (semaphore 5) ─────────────────
@@ -263,6 +265,7 @@ async def stock_selector():
             return
 
         pitched.sort(key=lambda c: c["rule_score"], reverse=True)
+        print(f"[selector] phase3: {len(pitched)}/{len(top)} pitches succeeded — {[c['ticker'] for c in pitched]}", flush=True)
         yield sse({"type": "status", "message": f"Judge selecting top 5 from {len(pitched)} stocks…"})
 
         # ── Phase 4: judge ranks top 5 (keepalive during long call) ──────────
@@ -295,6 +298,7 @@ async def stock_selector():
                 "rank":         r["rank"],
             })
 
+        print(f"[selector] phase5: emitting {len(top_results)} final stocks — {[s['symbol'] for s in top_results]}", flush=True)
         for stock in top_results:
             yield sse({"type": "found", "stock": stock, "total": len(top_results)})
         yield sse({"type": "complete", "stocks": top_results})
