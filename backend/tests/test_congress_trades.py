@@ -24,7 +24,7 @@ class CongressionalTradesTests(unittest.IsolatedAsyncioTestCase):
             rows = [purchase("AAPL")] * 100 if page == 1 else [purchase("AAPL"), purchase("MSFT")] if page == 2 else []
             return httpx.Response(200, json=osp_response(rows))
         details = await self.fetch(handler)
-        self.assertEqual(set(details), {"AAPL", "MSFT"}); self.assertEqual(len(details["AAPL"]["buyers"]), 102); self.assertIn(2, calls)
+        self.assertEqual(set(details), {"AAPL", "MSFT"}); self.assertEqual(len(details["AAPL"]["buyers"]), 101); self.assertIn(2, calls)
 
     async def test_sales_are_excluded_and_duplicates_are_collapsed(self):
         def handler(request):
