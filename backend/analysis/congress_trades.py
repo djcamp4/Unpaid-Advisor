@@ -1,5 +1,6 @@
 import asyncio
 import os
+import json
 import httpx
 from datetime import datetime, timedelta
 
@@ -39,7 +40,6 @@ def _is_purchase(tx: dict) -> bool:
 
 
 def _ticker(tx: dict) -> str | None:
-    # FMP stable API uses "ticker"; legacy endpoints may use "symbol"
     t = (tx.get("ticker") or tx.get("symbol") or "").strip().upper()
     if not t or t in ("--", "N/A", "NONE", ""):
         return None
@@ -49,83 +49,103 @@ def _ticker(tx: dict) -> str | None:
     return t
 
 
-def _member_name(tx: dict) -> str:
-    # FMP stable API returns full name as "senator" or "representative"
-    return (
-        tx.get("senator")
-        or tx.get("representative")
-        or f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip()
-        or "Unknown"
-    )
+PAGE_SIZE = 25
+MAX_PAGES = 100
+CHAMBERS = (("senate-latest", "Senate"), ("house-latest", "House"))
+
+
+def _read_page(response, chamber):
+    # Never include the request URL (which contains the API key) in errors.
+    if response.status_code == 402:
+        raise RuntimeError(f"FMP {chamber} disclosures returned HTTP 402 (payment/access required). Check that your FMP subscription includes congressional disclosures.")
+    if response.status_code != 200:
+        raise RuntimeError(f"FMP {chamber} disclosures returned HTTP {response.status_code}. Check API access and rate limits.")
+    try:
+        data = response.json()
+    except ValueError:
+        raise RuntimeError(f"FMP {chamber} disclosures returned invalid JSON.") from None
+    if not isinstance(data, list) or any(not isinstance(tx, dict) for tx in data):
+        raise RuntimeError(f"FMP {chamber} disclosures returned an unexpected response. Check API access.")
+    return data
+
+
+def _past_cutoff(data, cutoff):
+    # Latest feeds are ordered by disclosure, not transaction date. An old
+    # transaction disclosed recently must not stop pagination prematurely.
+    dates = [_parse_date(tx.get("disclosureDate")) for tx in data]
+    return bool(dates) and all(d is not None and d < cutoff for d in dates)
+
+
+def _check_page(data, seen, chamber):
+    fingerprint = json.dumps(data, sort_keys=True)
+    if fingerprint in seen:
+        raise RuntimeError(f"FMP {chamber} repeated a page; congressional history is incomplete.")
+    seen.add(fingerprint)
+
+
+async def _fetch_chamber(client, endpoint, chamber, api_key, cutoff):
+    transactions = []
+    seen = set()
+    for page in range(MAX_PAGES):
+        try:
+            response = await client.get(f"{FMP_BASE}/{endpoint}", params={
+                "page": page, "limit": PAGE_SIZE, "apikey": api_key,
+            })
+        except httpx.RequestError:
+            raise RuntimeError(f"Unable to reach FMP {chamber} disclosures. Please retry.") from None
+        data = _read_page(response, chamber)
+        if not data:
+            return transactions
+        _check_page(data, seen, chamber)
+        transactions.extend({**tx, "_chamber": chamber} for tx in data)
+        if _past_cutoff(data, cutoff):
+            return transactions
+        # Continue even after short pages: providers may cap the requested limit.
+    raise RuntimeError(f"FMP {chamber} history exceeded the pagination limit; scan is incomplete.")
 
 
 async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict]:
-    """
-    Return {ticker: {max_amount, buyers: [{name, chamber, amount, date}]}}.
-    Paginates both chambers until at least 25 unique valid tickers are found
-    or all pages are exhausted (max 10 pages × 25 = 250 records per chamber).
-    """
+    """Collect purchases disclosed within the window across both paginated feeds."""
     api_key = os.getenv("FMP_API_KEY", "")
     if not api_key:
-        raise RuntimeError(
-            "FMP_API_KEY is not set. Add it to backend/.env as FMP_API_KEY=your_key"
-        )
-
+        raise RuntimeError("FMP_API_KEY is not set. Add it to backend/.env as FMP_API_KEY=your_key")
     cutoff = datetime.now().date() - timedelta(days=days)
-    TARGET = 25
-    MAX_PAGES = 10
-
-    details: dict[str, dict] = {}
-
     async with httpx.AsyncClient(timeout=30) as client:
-        for url, chamber in [
-            (f"{FMP_BASE}/senate-latest", "Senate"),
-            (f"{FMP_BASE}/house-latest", "House"),
-        ]:
-            if len(details) >= TARGET:
-                break
-            label = chamber.lower()
-            for page in range(MAX_PAGES):
-                if len(details) >= TARGET:
-                    print(f"[congress] reached {TARGET} tickers — stopping {label} pagination", flush=True)
-                    break
-                resp = await client.get(url, params={"page": page, "limit": 25, "apikey": api_key})
-                if resp.status_code != 200:
-                    print(f"[congress] {label} p{page}: HTTP {resp.status_code}", flush=True)
-                    break
-                data = resp.json()
-                if not isinstance(data, list):
-                    print(f"[congress] {label} p{page}: non-list response — {str(data)[:200]}", flush=True)
-                    break
-                print(f"[congress] {label} p{page}: {len(data)} records (have {len(details)} tickers so far)", flush=True)
+        batches = await asyncio.gather(*(
+            _fetch_chamber(client, endpoint, chamber, api_key, cutoff)
+            for endpoint, chamber in CHAMBERS
+        ))
+    return _purchase_details([tx for batch in batches for tx in batch], cutoff)
 
-                for tx in data:
-                    if not _is_purchase(tx):
-                        continue
-                    tx_date = _parse_date(tx.get("disclosureDate") or tx.get("transactionDate") or "")
-                    if tx_date is None or tx_date < cutoff:
-                        continue
-                    ticker = _ticker(tx)
-                    if not ticker:
-                        continue
-                    amount = _parse_amount(tx.get("amount", ""))
-                    name = _member_name(tx)
 
-                    if ticker not in details:
-                        details[ticker] = {"max_amount": 0, "buyers": []}
-                    if amount > details[ticker]["max_amount"]:
-                        details[ticker]["max_amount"] = amount
-                    details[ticker]["buyers"].append({
-                        "name": name,
-                        "chamber": chamber,
-                        "amount": tx.get("amount", "undisclosed"),
-                        "date": str(tx_date),
-                    })
+def _purchase_details(transactions, cutoff):
+    details: dict[str, dict] = {}
+    for tx in transactions:
+        if not _is_purchase(tx):
+            continue
+        tx_date = _parse_date(tx.get("disclosureDate") or tx.get("transactionDate") or "")
+        if tx_date is None or tx_date < cutoff:
+            continue
+        ticker = _ticker(tx)
+        if not ticker:
+            continue
+        amount = _parse_amount(tx.get("amount", ""))
+        name = (tx.get("senator") or tx.get("representative") or f"{tx.get('firstName', '')} {tx.get('lastName', '')}".strip() or "Unknown")
+        chamber = tx.get("_chamber", "Congress")
 
-                if len(data) < 25:
-                    break  # last page — no more to fetch
+        if ticker not in details:
+            details[ticker] = {"max_amount": 0, "buyers": []}
 
-    print(f"[congress] {len(details)} unique tickers after filtering: {list(details.keys())[:10]}", flush=True)
+        if amount > details[ticker]["max_amount"]:
+            details[ticker]["max_amount"] = amount
+
+        details[ticker]["buyers"].append({
+            "name": name,
+            "chamber": chamber,
+            "amount": tx.get("amount", "undisclosed"),
+            "date": str(tx_date),
+        })
+
     return details
 
 
@@ -151,45 +171,26 @@ def get_ticker_congressional_context_sync(ticker: str, days: int = 60) -> dict |
     if not api_key:
         return None
     cutoff = datetime.now().date() - timedelta(days=days)
-    params = {"page": 0, "limit": 25, "apikey": api_key}
     try:
-        transactions: list[dict] = []
-        for url, chamber in [
-            (f"{FMP_BASE}/senate-latest", "Senate"),
-            (f"{FMP_BASE}/house-latest", "House"),
-        ]:
-            r = req.get(url, params=params, timeout=30)
-            if r.status_code == 200:
-                data = r.json()
-                if isinstance(data, list):
-                    for tx in data:
-                        tx["_chamber"] = chamber
-                    transactions.extend(data)
-
-        details: dict[str, dict] = {}
-        for tx in transactions:
-            if not _is_purchase(tx):
-                continue
-            tx_date = _parse_date(tx.get("disclosureDate") or tx.get("transactionDate") or "")
-            if tx_date is None or tx_date < cutoff:
-                continue
-            t = _ticker(tx)
-            if not t:
-                continue
-            amount = _parse_amount(tx.get("amount", ""))
-            name = _member_name(tx)
-            if t not in details:
-                details[t] = {"max_amount": 0, "buyers": []}
-            if amount > details[t]["max_amount"]:
-                details[t]["max_amount"] = amount
-            details[t]["buyers"].append({
-                "name": name,
-                "chamber": tx.get("_chamber", "Congress"),
-                "amount": tx.get("amount", "undisclosed"),
-                "date": str(tx_date),
-            })
-        return details.get(ticker.upper())
-    except Exception:
+        transactions = []
+        with req.Session() as client:
+            for endpoint, chamber in CHAMBERS:
+                seen = set()
+                for page in range(MAX_PAGES):
+                    response = client.get(f"{FMP_BASE}/{endpoint}", params={
+                        "page": page, "limit": PAGE_SIZE, "apikey": api_key,
+                    }, timeout=30)
+                    data = _read_page(response, chamber)
+                    if not data:
+                        break
+                    _check_page(data, seen, chamber)
+                    transactions.extend({**tx, "_chamber": chamber} for tx in data)
+                    if _past_cutoff(data, cutoff):
+                        break
+                else:
+                    return None  # Do not present a truncated history as complete.
+        return _purchase_details(transactions, cutoff).get(ticker.upper())
+    except (req.RequestException, RuntimeError):
         return None
 
 

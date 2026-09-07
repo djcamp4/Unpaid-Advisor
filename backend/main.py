@@ -168,9 +168,20 @@ async def stock_selector():
         # ── Phase 1: fetch congressional purchases ────────────────────────────
         yield sse({"type": "status", "message": "Fetching congressional trades…"})
         try:
-            trade_details = await fetch_congressional_purchase_details(days=90)
+            trade_task = asyncio.create_task(fetch_congressional_purchase_details(days=90))
+            try:
+                while not trade_task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(trade_task), timeout=10)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                trade_details = trade_task.result()
+            finally:
+                if not trade_task.done():
+                    trade_task.cancel()
+                    await asyncio.gather(trade_task, return_exceptions=True)
         except Exception as e:
-            yield sse({"type": "error", "message": f"Capitol Trades API error: {e}"})
+            yield sse({"type": "error", "message": f"Congressional trade data error: {e}"})
             return
 
         if not trade_details:
