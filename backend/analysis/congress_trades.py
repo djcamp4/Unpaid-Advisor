@@ -5,6 +5,7 @@ import httpx
 from datetime import datetime, timedelta
 
 FMP_BASE = "https://financialmodelingprep.com/stable"
+OSP_BASE = "https://api.opensourceforall.com/api/v1"
 
 _AMOUNT_MAP = {
     "$1,001 - $15,000":           8_000,
@@ -106,16 +107,25 @@ async def _fetch_chamber(client, endpoint, chamber, api_key, cutoff):
 
 async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict]:
     """Collect purchases disclosed within the window across both paginated feeds."""
-    api_key = os.getenv("FMP_API_KEY", "")
+    api_key = os.getenv("OSP_API_KEY", "")
     if not api_key:
-        raise RuntimeError("FMP_API_KEY is not set. Add it to backend/.env as FMP_API_KEY=your_key")
+        raise RuntimeError("OSP_API_KEY is not set. Add the OSP-API secret to the backend environment.")
     cutoff = datetime.now().date() - timedelta(days=days)
     async with httpx.AsyncClient(timeout=30) as client:
-        batches = await asyncio.gather(*(
-            _fetch_chamber(client, endpoint, chamber, api_key, cutoff)
-            for endpoint, chamber in CHAMBERS
-        ))
-    return _purchase_details([tx for batch in batches for tx in batch], cutoff)
+        transactions = []
+        for page in range(1, MAX_PAGES + 1):
+            response = await client.get(f"{OSP_BASE}/trades", headers={"X-API-Key": api_key}, params={"page": page, "per_page": PAGE_SIZE})
+            if response.status_code != 200:
+                raise RuntimeError(f"OSP congressional trades returned HTTP {response.status_code}.")
+            payload = response.json()
+            data = payload.get("data") if isinstance(payload, dict) else None
+            if not isinstance(data, list):
+                raise RuntimeError("OSP congressional trades returned an unexpected response.")
+            transactions.extend(data)
+            if not data or len(data) < PAGE_SIZE or _past_cutoff([{"disclosureDate": tx.get("disclosure_date")} for tx in data], cutoff):
+                break
+    normalized = [{"ticker": tx.get("ticker"), "type": tx.get("transaction_type"), "amount": tx.get("amount_range"), "disclosureDate": tx.get("disclosure_date"), "transactionDate": tx.get("transaction_date"), "senator": tx.get("member_name") or tx.get("politician"), "representative": tx.get("member_name") or tx.get("politician"), "_chamber": tx.get("chamber", "Congress").title()} for tx in transactions]
+    return _purchase_details(normalized, cutoff)
 
 
 def _purchase_details(transactions, cutoff):
@@ -167,7 +177,7 @@ async def get_ticker_congressional_context(ticker: str, days: int = 60) -> dict 
 def get_ticker_congressional_context_sync(ticker: str, days: int = 60) -> dict | None:
     """Synchronous version using requests — safe to call from sync or async endpoints."""
     import requests as req
-    api_key = os.getenv("FMP_API_KEY", "")
+    api_key = os.getenv("OSP_API_KEY", "")
     if not api_key:
         return None
     cutoff = datetime.now().date() - timedelta(days=days)
