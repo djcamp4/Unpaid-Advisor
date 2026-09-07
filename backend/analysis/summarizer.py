@@ -1,5 +1,5 @@
 """
-Three-agent investment analysis via OpenRouter:
+Three-agent investment analysis via OpenAI:
   1. Value agent  — Buffett/Graham/Lynch perspective + decision
   2. Growth agent — Aggressive growth perspective + decision (reads value case)
   3. Judge        — Weighs both, produces final verdict, confidence %, and summary
@@ -9,9 +9,10 @@ Returns None gracefully if API key is missing or any call fails.
 import os
 import re
 import time
-import anthropic
+import httpx
 
-_MODEL = "claude-opus-4-8"
+_INVESTOR_MODEL = "gpt-5.4-mini"
+_JUDGE_MODEL = "gpt-5.4"
 
 # Cache debate results for 2 hours so repeated runs of the same symbol
 # (e.g. stock selector + manual analysis) return consistent verdicts.
@@ -22,31 +23,51 @@ _MAX_RETRIES = 3
 _RETRY_CAP = 20  # seconds
 
 
-def _call(messages: list, api_key: str, max_tokens: int = 500) -> str | None:
-    system = next((m["content"] for m in messages if m["role"] == "system"), "")
-    user_messages = [m for m in messages if m["role"] != "system"]
-    client = anthropic.Anthropic(api_key=api_key)
-
-    for attempt in range(_MAX_RETRIES):
-        try:
-            resp = client.messages.create(
-                model=_MODEL,
-                max_tokens=max_tokens,
-                system=system,
-                messages=user_messages,
-            )
-            return resp.content[0].text.strip() or None
-        except anthropic.RateLimitError:
-            wait = min(5 * (attempt + 1), _RETRY_CAP)
-            print(f"[summarizer] Rate limited, waiting {wait}s (attempt {attempt + 1}/{_MAX_RETRIES})", flush=True)
-            if attempt < _MAX_RETRIES - 1:
-                time.sleep(wait)
-                continue
-            print("[summarizer] Exhausted retries on rate limit", flush=True)
-            return None
-        except Exception as e:
-            print(f"[summarizer] Anthropic call failed: {e}", flush=True)
-            return None
+def _call(messages: list, api_key: str, max_tokens: int = 500,
+          *, model: str = _INVESTOR_MODEL) -> str | None:
+    # Keep reasoning disabled so the existing short output budgets are spent
+    # on the requested write-ups, not hidden reasoning tokens.
+    payload = {
+        "model": model,
+        "input": messages,
+        "max_output_tokens": max_tokens,
+        "reasoning": {"effort": "none"},
+        "store": False,
+    }
+    with httpx.Client(timeout=90) as client:
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = client.post(
+                    "https://api.openai.com/v1/responses",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json=payload,
+                )
+                if resp.status_code == 429 or resp.status_code >= 500:
+                    if attempt < _MAX_RETRIES - 1:
+                        time.sleep(min(5 * (attempt + 1), _RETRY_CAP))
+                        continue
+                if resp.status_code != 200:
+                    print(f"[summarizer] OpenAI {model}: HTTP {resp.status_code}", flush=True)
+                    return None
+                data = resp.json()
+                if data.get("status") != "completed":
+                    print(f"[summarizer] OpenAI {model}: response incomplete or failed", flush=True)
+                    return None
+                text = "\n".join(
+                    part.get("text", "")
+                    for item in data.get("output", []) if item.get("type") == "message"
+                    for part in item.get("content", []) if part.get("type") == "output_text"
+                ).strip()
+                return text or None
+            except httpx.RequestError:
+                if attempt < _MAX_RETRIES - 1:
+                    time.sleep(min(5 * (attempt + 1), _RETRY_CAP))
+                    continue
+                print(f"[summarizer] OpenAI {model}: connection failed", flush=True)
+                return None
+            except (ValueError, TypeError, AttributeError):
+                print(f"[summarizer] OpenAI {model}: invalid response", flush=True)
+                return None
     return None
 
 
@@ -161,7 +182,7 @@ def generate_stock_pitches(
     if cached and time.time() - cached[0] < _CACHE_TTL:
         return cached[1]
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None
 
@@ -227,7 +248,7 @@ def rank_stocks(candidates: list[dict]) -> list[dict]:
     Returns [{symbol, rank, confidence, rationale}] sorted rank 1–5.
     Falls back to rule score order if the API call fails.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
 
     def fallback():
         return [
@@ -286,7 +307,7 @@ def rank_stocks(candidates: list[dict]) -> list[dict]:
             "role": "user",
             "content": f"From these {n} candidate stocks, select your top 5:\n\n" + "\n\n".join(entries),
         },
-    ], api_key, max_tokens=700)
+    ], api_key, max_tokens=700, model=_JUDGE_MODEL)
 
     if not judge_raw:
         print("[summarizer] rank_stocks: judge call failed, using rule score fallback", flush=True)
@@ -337,10 +358,9 @@ def _generate_debate_uncached(
     fundamentals: dict,
     congress_context: str | None = None,
 ) -> dict | None:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    print(f"[summarizer] api_key present: {bool(api_key)}, length: {len(api_key) if api_key else 0}", flush=True)
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        print("[summarizer] ANTHROPIC_API_KEY not set — skipping debate", flush=True)
+        print("[summarizer] OPENAI_API_KEY not set — skipping debate", flush=True)
         return None
 
     data = _data_block(symbol, company_name, verdict, confidence, factors,
@@ -472,7 +492,7 @@ def _generate_debate_uncached(
                 "Weigh both cases and deliver your verdict."
             ),
         },
-    ], api_key, max_tokens=700)
+    ], api_key, max_tokens=700, model=_JUDGE_MODEL)
 
     if not judge_raw:
         return None

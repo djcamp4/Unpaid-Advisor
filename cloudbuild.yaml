@@ -33,7 +33,7 @@ steps:
       - --max-instances=10
       - --timeout=3600
       - --remove-env-vars=FMP_API_KEY
-      - --update-secrets=ANTHROPIC_API_KEY=Anthropic_API:latest,POLYGON_API_KEY=polygon-api-key:latest,FMP_API_KEY=fmp-api-key:latest
+      - --update-secrets=OPENAI_API_KEY=OpenAI-API:latest,POLYGON_API_KEY=polygon-api-key:latest,FMP_API_KEY=fmp-api-key:latest
     id: cloud-run-deploy
     waitFor: ['docker-push']
 
