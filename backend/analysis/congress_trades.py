@@ -184,21 +184,17 @@ def get_ticker_congressional_context_sync(ticker: str, days: int = 60) -> dict |
     try:
         transactions = []
         with req.Session() as client:
-            for endpoint, chamber in CHAMBERS:
-                seen = set()
-                for page in range(MAX_PAGES):
-                    response = client.get(f"{FMP_BASE}/{endpoint}", params={
-                        "page": page, "limit": PAGE_SIZE, "apikey": api_key,
-                    }, timeout=30)
-                    data = _read_page(response, chamber)
-                    if not data:
-                        break
-                    _check_page(data, seen, chamber)
-                    transactions.extend({**tx, "_chamber": chamber} for tx in data)
-                    if _past_cutoff(data, cutoff):
-                        break
-                else:
-                    return None  # Do not present a truncated history as complete.
+            for page in range(1, MAX_PAGES + 1):
+                response = client.get(f"{OSP_BASE}/trades", headers={"X-API-Key": api_key}, params={"page": page, "per_page": PAGE_SIZE}, timeout=30)
+                if response.status_code != 200:
+                    return None
+                payload = response.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                if not isinstance(data, list):
+                    return None
+                transactions.extend({"ticker": tx.get("ticker"), "type": tx.get("transaction_type"), "amount": tx.get("amount_range"), "disclosureDate": tx.get("disclosure_date"), "transactionDate": tx.get("transaction_date"), "senator": tx.get("member_name") or tx.get("politician"), "representative": tx.get("member_name") or tx.get("politician"), "_chamber": tx.get("chamber", "Congress").title()} for tx in data)
+                if not data or len(data) < PAGE_SIZE or _past_cutoff([{"disclosureDate": tx.get("disclosure_date")} for tx in data], cutoff):
+                    break
         return _purchase_details(transactions, cutoff).get(ticker.upper())
     except (req.RequestException, RuntimeError):
         return None
