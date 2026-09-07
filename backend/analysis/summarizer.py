@@ -10,9 +10,21 @@ import os
 import re
 import time
 import httpx
+from contextvars import ContextVar
 
 _INVESTOR_MODEL = "gpt-5.4-mini"
 _JUDGE_MODEL = "gpt-5.4"
+_ai_error = ContextVar("ai_error", default=None)
+
+
+def get_ai_error():
+    return _ai_error.get()
+
+
+def _failure(message):
+    _ai_error.set(message)
+    return None
+
 
 # Cache debate results for 2 hours so repeated runs of the same symbol
 # (e.g. stock selector + manual analysis) return consistent verdicts.
@@ -39,7 +51,7 @@ def _call(messages: list, api_key: str, max_tokens: int = 500,
             try:
                 resp = client.post(
                     "https://api.openai.com/v1/responses",
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers={"Authorization": f"Bearer {api_key.strip()}"},
                     json=payload,
                 )
                 if resp.status_code == 429 or resp.status_code >= 500:
@@ -48,26 +60,32 @@ def _call(messages: list, api_key: str, max_tokens: int = 500,
                         continue
                 if resp.status_code != 200:
                     print(f"[summarizer] OpenAI {model}: HTTP {resp.status_code}", flush=True)
-                    return None
+                    if resp.status_code == 401:
+                        return _failure("OpenAI rejected the API key. Check the OpenAI-API secret.")
+                    if resp.status_code == 429:
+                        return _failure("OpenAI quota or rate limit reached. Check API billing and usage limits.")
+                    if resp.status_code in (403, 404):
+                        return _failure("OpenAI model access is unavailable. Check this API project's model permissions.")
+                    return _failure(f"OpenAI request failed (HTTP {resp.status_code}).")
                 data = resp.json()
                 if data.get("status") != "completed":
                     print(f"[summarizer] OpenAI {model}: response incomplete or failed", flush=True)
-                    return None
+                    return _failure("OpenAI returned an incomplete analysis. Please retry.")
                 text = "\n".join(
                     part.get("text", "")
                     for item in data.get("output", []) if item.get("type") == "message"
                     for part in item.get("content", []) if part.get("type") == "output_text"
                 ).strip()
-                return text or None
+                return text or _failure("OpenAI returned no analysis text.")
             except httpx.RequestError:
                 if attempt < _MAX_RETRIES - 1:
                     time.sleep(min(5 * (attempt + 1), _RETRY_CAP))
                     continue
                 print(f"[summarizer] OpenAI {model}: connection failed", flush=True)
-                return None
+                return _failure("Could not connect to OpenAI. Please retry.")
             except (ValueError, TypeError, AttributeError):
                 print(f"[summarizer] OpenAI {model}: invalid response", flush=True)
-                return None
+                return _failure("OpenAI returned an invalid response.")
     return None
 
 
@@ -145,6 +163,7 @@ def generate_debate(
     fundamentals: dict,
     congress_context: str | None = None,
 ) -> dict | None:
+    _ai_error.set(None)
     cached = _debate_cache.get(symbol)
     if cached and time.time() - cached[0] < _CACHE_TTL:
         return cached[1]

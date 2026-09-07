@@ -22,7 +22,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
-from analysis.summarizer import generate_debate, generate_stock_pitches, rank_stocks
+from analysis.summarizer import generate_debate, generate_stock_pitches, rank_stocks, get_ai_error
 from analysis.congress_trades import (
     fetch_congressional_purchases,
     fetch_congressional_purchase_details,
@@ -111,6 +111,7 @@ async def analyze(symbol: str):
         "history": get_history(data),
         "news": get_news(data),
         "debate": debate,
+        "ai_error": None if debate else get_ai_error(),
         **score_data,
         "verdict": verdict,
         "confidence": confidence,
