@@ -81,7 +81,7 @@ def _fv(stmt: dict, *keys) -> float | None:
     return None
 
 
-def fetch_all(symbol: str) -> dict:
+def fetch_all(symbol: str, *, include_history: bool = True, include_news: bool = True) -> dict:
     symbol = symbol.upper().strip()
 
     def _fetch():
@@ -120,18 +120,18 @@ def fetch_all(symbol: str) -> dict:
         hist_daily = _get(
             f"/v2/aggs/ticker/{symbol}/range/1/day/{one_year_ago}/{today}",
             {"adjusted": "true", "sort": "asc", "limit": 365},
-        )
+        ) if include_history else None
 
         # Weekly history (5 years)
         hist_weekly = _get(
             f"/v2/aggs/ticker/{symbol}/range/1/week/{five_years_ago}/{today}",
             {"adjusted": "true", "sort": "asc", "limit": 260},
-        )
+        ) if include_history else None
 
         # News
         news_raw = _get("/v2/reference/news", {
             "ticker": symbol, "limit": 8, "sort": "published_utc", "order": "desc",
-        })
+        }) if include_news else None
         news = news_raw.get("results", []) if news_raw else []
 
         return {
@@ -145,7 +145,8 @@ def fetch_all(symbol: str) -> dict:
             "news_raw": news,
         }
 
-    return _cached(symbol, _fetch)
+    cache_key = f"{symbol}:history={include_history}:news={include_news}"
+    return _cached(cache_key, _fetch)
 
 
 # ── Price / market helpers ────────────────────────────────────────────────────

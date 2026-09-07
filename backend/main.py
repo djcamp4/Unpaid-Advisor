@@ -195,10 +195,10 @@ async def stock_selector():
 
         # ── Phase 2: rule engine (parallel batches of 5) ─────────────────────
         def fetch_and_score(ticker: str):
-            data = fetch_all(ticker)
+            data = fetch_all(ticker, include_history=False, include_news=False)
             return ticker, data, run_rules(data)
 
-        BATCH = 5
+        BATCH = 10
         candidates: list[dict] = []
         for i in range(0, len(tickers), BATCH):
             batch = tickers[i:i + BATCH]
