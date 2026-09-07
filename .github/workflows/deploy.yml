@@ -23,6 +23,11 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Read recent OpenAI diagnostics
+        continue-on-error: true
+        run: |
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="unpaid-advisor-api" AND textPayload:"[summarizer] OpenAI"' --project=${{ secrets.GCP_PROJECT_ID }} --freshness=20m --limit=10 --format='value(textPayload)'
+
       - name: Submit Cloud Build
         run: |
           gcloud builds submit \
