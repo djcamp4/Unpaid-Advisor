@@ -124,7 +124,7 @@ async def fetch_congressional_purchase_details(days: int = 30) -> dict[str, dict
             transactions.extend(data)
             if not data or len(data) < PAGE_SIZE or _past_cutoff([{"disclosureDate": tx.get("disclosure_date")} for tx in data], cutoff):
                 break
-    normalized = [{"ticker": tx.get("ticker"), "type": tx.get("transaction_type"), "amount": tx.get("amount_range"), "disclosureDate": tx.get("disclosure_date"), "transactionDate": tx.get("transaction_date"), "senator": tx.get("member_name") or tx.get("politician"), "representative": tx.get("member_name") or tx.get("politician"), "_chamber": tx.get("chamber", "Congress").title()} for tx in transactions]
+    normalized = [{"ticker": tx.get("ticker") or tx.get("symbol"), "type": tx.get("transaction_type") or tx.get("transaction") or tx.get("type"), "amount": tx.get("amount_range") or tx.get("amount"), "disclosureDate": tx.get("disclosure_date") or tx.get("report_date") or tx.get("date"), "transactionDate": tx.get("transaction_date") or tx.get("transactionDate"), "senator": tx.get("member_name") or tx.get("politician") or tx.get("representative"), "representative": tx.get("member_name") or tx.get("politician") or tx.get("representative"), "_chamber": (tx.get("chamber") or tx.get("house") or "Congress").title()} for tx in transactions]
     return _purchase_details(normalized, cutoff)
 
 
@@ -192,7 +192,7 @@ def get_ticker_congressional_context_sync(ticker: str, days: int = 60) -> dict |
                 data = payload.get("data") if isinstance(payload, dict) else None
                 if not isinstance(data, list):
                     return None
-                transactions.extend({"ticker": tx.get("ticker"), "type": tx.get("transaction_type"), "amount": tx.get("amount_range"), "disclosureDate": tx.get("disclosure_date"), "transactionDate": tx.get("transaction_date"), "senator": tx.get("member_name") or tx.get("politician"), "representative": tx.get("member_name") or tx.get("politician"), "_chamber": tx.get("chamber", "Congress").title()} for tx in data)
+                transactions.extend({"ticker": tx.get("ticker") or tx.get("symbol"), "type": tx.get("transaction_type") or tx.get("transaction") or tx.get("type"), "amount": tx.get("amount_range") or tx.get("amount"), "disclosureDate": tx.get("disclosure_date") or tx.get("report_date") or tx.get("date"), "transactionDate": tx.get("transaction_date") or tx.get("transactionDate"), "senator": tx.get("member_name") or tx.get("politician") or tx.get("representative"), "representative": tx.get("member_name") or tx.get("politician") or tx.get("representative"), "_chamber": (tx.get("chamber") or tx.get("house") or "Congress").title()} for tx in data)
                 if not data or len(data) < PAGE_SIZE or _past_cutoff([{"disclosureDate": tx.get("disclosure_date")} for tx in data], cutoff):
                     break
         return _purchase_details(transactions, cutoff).get(ticker.upper())
