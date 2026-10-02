@@ -22,7 +22,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
-from analysis.streaming import keepalive_stream
+from analysis.streaming import keepalive_stream, failure_reason
 from analysis.summarizer import generate_debate, generate_stock_pitches, rank_stocks, get_ai_error
 from analysis.congress_trades import (
     fetch_congressional_purchases,
@@ -241,25 +241,31 @@ async def stock_selector():
         async def pitch_one(c: dict):
             ticker = c["ticker"]
             congress_ctx = format_congress_context(trade_details.get(ticker))
-            async with sem:
-                pitches = await asyncio.to_thread(
-                    generate_stock_pitches,
+            def generate_with_error():
+                pitches = generate_stock_pitches(
                     ticker, c["company_name"],
                     c["score_data"]["verdict"], c["score_data"]["confidence"],
                     c["score_data"]["factors"], c["score_data"]["rule_results"],
                     c["kpis"], c["fundamentals"], congress_ctx,
                 )
-            return ticker, pitches, congress_ctx
+                return pitches, get_ai_error()
+            async with sem:
+                pitches, ai_error = await asyncio.to_thread(generate_with_error)
+            return ticker, pitches, congress_ctx, ai_error
 
         tasks = [asyncio.create_task(pitch_one(c)) for c in top]
         workers.extend(tasks)
         pitched: list[dict] = []
+        pitch_errors = []
 
         for fut in asyncio.as_completed(tasks):
             try:
-                ticker, pitches, congress_ctx = await fut
-            except Exception:
+                ticker, pitches, congress_ctx, ai_error = await fut
+            except Exception as exc:
+                pitch_errors.append(failure_reason(exc))
                 continue
+            if not pitches:
+                pitch_errors.append(ai_error or "The AI service returned no analysis.")
             yield sse({"type": "analyzing", "ticker": ticker, "checked": len(pitched) + 1})
             if pitches:
                 c = ticker_to_candidate[ticker]
@@ -276,7 +282,8 @@ async def stock_selector():
                 })
 
         if not pitched:
-            yield sse({"type": "error", "message": "AI pitch generation failed for all candidates."})
+            reasons = " ".join(dict.fromkeys(pitch_errors))
+            yield sse({"type": "error", "message": f"AI analysis failed for all {len(top)} candidates. {reasons}"})
             return
 
         pitched.sort(key=lambda c: c["rule_score"], reverse=True)

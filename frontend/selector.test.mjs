@@ -38,6 +38,15 @@ test('interrupted partial results do not pretend the scan completed', () => {
   assert.equal(events[1].type, 'error')
 })
 
+test('disconnect explains the last active stage and elapsed time', () => {
+  const { source, events } = setup()
+  source.onmessage({ data: '{"type":"status","message":"Judge selecting top 5"}' })
+  source.onerror()
+  assert.match(events[1].message, /Judge selecting top 5/)
+  assert.match(events[1].message, /after \d+ seconds/)
+  assert.match(events[1].message, /without a server error report/)
+})
+
 test('cleanup suppresses late callbacks', () => {
   const { source, events, cleanup } = setup()
   cleanup()
