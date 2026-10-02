@@ -14,25 +14,24 @@ export async function analyzeStock(symbol, signal) {
 export function startStockSelector(onEvent) {
   const url = `${BASE}/stock-selector`
   const source = new EventSource(url)
-  let foundCount = 0
+  let closed = false
+  const close = () => { closed = true; source.close() }
 
   source.onmessage = (e) => {
+    if (closed) return
+    let event
     try {
-      const event = JSON.parse(e.data)
-      if (event.type === 'found') foundCount++
-      onEvent(event)
-    } catch { /* ignore parse errors */ }
+      event = JSON.parse(e.data)
+    } catch { return }
+    if (event.type === 'complete' || event.type === 'error') close()
+    onEvent(event)
   }
 
   source.onerror = () => {
-    source.close()
-    if (foundCount > 0) {
-      // Preserve stocks already found rather than replacing them with a hard error
-      onEvent({ type: 'complete' })
-    } else {
-      onEvent({ type: 'error', message: 'Connection lost. Please try again.' })
-    }
+    if (closed) return
+    close()
+    onEvent({ type: 'error', message: 'The connection ended before analysis finished. Please retry the scan.' })
   }
 
-  return () => source.close()
+  return close
 }

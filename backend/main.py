@@ -22,6 +22,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
+from analysis.streaming import keepalive_stream
 from analysis.summarizer import generate_debate, generate_stock_pitches, rank_stocks, get_ai_error
 from analysis.congress_trades import (
     fetch_congressional_purchases,
@@ -46,7 +47,7 @@ def health():
 
 
 @app.get("/analyze/{symbol}")
-async def analyze(symbol: str):
+def analyze(symbol: str):
     symbol = symbol.upper().strip()
     try:
         data = fetch_all(symbol)
@@ -161,6 +162,7 @@ async def stock_selector():
     Always returns exactly 5 stocks.
     """
     polygon_key = os.getenv("POLYGON_API_KEY", "")
+    workers = []
 
     async def event_stream():
         def sse(obj: dict) -> str:
@@ -250,6 +252,7 @@ async def stock_selector():
             return ticker, pitches, congress_ctx
 
         tasks = [asyncio.create_task(pitch_one(c)) for c in top]
+        workers.extend(tasks)
         pitched: list[dict] = []
 
         for fut in asyncio.as_completed(tasks):
@@ -282,6 +285,7 @@ async def stock_selector():
 
         # ── Phase 4: judge ranks top 5 (keepalive during long call) ──────────
         judge_task = asyncio.create_task(asyncio.to_thread(rank_stocks, pitched))
+        workers.append(judge_task)
         while not judge_task.done():
             try:
                 await asyncio.wait_for(asyncio.shield(judge_task), timeout=10)
@@ -316,7 +320,7 @@ async def stock_selector():
         yield sse({"type": "complete", "stocks": top_results})
 
     return StreamingResponse(
-        event_stream(),
+        keepalive_stream(event_stream(), workers),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

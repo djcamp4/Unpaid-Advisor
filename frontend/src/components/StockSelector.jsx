@@ -182,17 +182,7 @@ export default function StockSelector({ onSelect }) {
             if (prev.length >= 5) return prev
             return [...prev, event.stock]
           })
-          setFound(f => {
-            const next = f + 1
-            if (next >= 5) {
-              setTimeout(() => {
-                if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null }
-                setPhase('done')
-                setStatusMsg('')
-              }, 0)
-            }
-            return next
-          })
+          setFound(f => f + 1)
           setActiveTicker(null)
           break
         case 'complete': {
