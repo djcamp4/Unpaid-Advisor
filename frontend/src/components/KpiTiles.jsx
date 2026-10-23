@@ -50,13 +50,13 @@ export default function KpiTiles({ kpis, price }) {
       sub: '',
     },
     {
-      label: 'EPS (TTM)',
+      label: 'EPS (Annual)',
       value: kpis.eps_ttm != null ? `$${kpis.eps_ttm.toFixed(2)}` : 'N/A',
       sub: kpis.forward_eps != null ? `Fwd: $${kpis.forward_eps.toFixed(2)}` : '',
     },
     {
       label: 'Dividend Yield',
-      value: kpis.dividend_yield != null ? `${(kpis.dividend_yield * 100).toFixed(2)}%` : 'None',
+      value: kpis.dividend_yield != null ? `${(kpis.dividend_yield * 100).toFixed(2)}%` : 'N/A',
       sub: kpis.beta != null ? `Beta: ${kpis.beta.toFixed(2)}` : '',
     },
   ]

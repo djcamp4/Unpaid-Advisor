@@ -41,8 +41,8 @@ export default function Fundamentals({ fundamentals: f }) {
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <tbody>
-          <Row label="EPS (TTM)" value={f.eps_ttm != null ? `$${f.eps_ttm.toFixed(2)}` : 'N/A'} />
-          <Row label="Revenue (TTM)" value={fmt(f.revenue_ttm, '$')} />
+          <Row label="EPS (Annual)" value={f.eps_ttm != null ? `$${f.eps_ttm.toFixed(2)}` : 'N/A'} />
+          <Row label="Revenue (Annual)" value={fmt(f.revenue_ttm, '$')} />
           <Row
             label="Revenue Growth (YoY)"
             value={pctFmt(f.revenue_growth_yoy)}

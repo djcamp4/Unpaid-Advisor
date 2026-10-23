@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import requests as _requests
 import pandas as pd
 import numpy as np
+from analysis.financials import fetch_financials
 
 _POLY_KEY = os.environ.get("POLYGON_API_KEY", "")
 _POLY_BASE = "https://api.polygon.io"
@@ -111,10 +112,7 @@ def fetch_all(symbol: str, *, include_history: bool = True, include_news: bool =
         details = details_raw.get("results", {}) if details_raw else {}
 
         # Annual financial statements (last 5 years)
-        fins_raw = _get("/vX/reference/financials", {
-            "ticker": symbol, "timeframe": "annual", "limit": 5, "order": "desc",
-        })
-        fins = fins_raw.get("results", []) if fins_raw else []
+        fins = fetch_financials(symbol)
 
         # Daily history (1 year)
         hist_daily = _get(
@@ -317,7 +315,7 @@ def get_fundamentals(data: dict) -> dict:
     capex = _latest_fin(fins, "cash_flow_statement",
                         "capital_expenditure", "purchases_of_property_plant_and_equipment",
                         "capital_expenditures")
-    fcf = (op_cf + capex) if op_cf and capex else op_cf
+    fcf = (op_cf + capex) if op_cf is not None and capex is not None else None
 
     gross_margin = (gross_profit / rev) if gross_profit and rev else None
     op_margin = (op_income / rev) if op_income and rev else None

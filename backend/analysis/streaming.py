@@ -3,9 +3,12 @@ import asyncio
 import json
 import logging
 import httpx
+from analysis.financials import FinancialDataError
 
 
 def failure_reason(exc):
+    if isinstance(exc, FinancialDataError):
+        return str(exc)
     if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
         return "A data service took too long to respond. Please retry."
     if isinstance(exc, (ConnectionError, httpx.RequestError)):

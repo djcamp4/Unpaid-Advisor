@@ -269,6 +269,12 @@ export default function App() {
 
             {/* KPIs */}
             <KpiTiles kpis={data.kpis} price={data.price} />
+            {data.financial_data_source && (
+              <p style={{ color: '#94a3b8', fontSize: 12 }}>
+                Financial statements: {data.financial_data_source}, annual period ending {data.financial_period_end}.
+                {' '}N/A means that metric is not available or cannot be calculated from the reported figures.
+              </p>
+            )}
 
             {/* Price Chart (full width) */}
             <PriceChart history={data.history} />

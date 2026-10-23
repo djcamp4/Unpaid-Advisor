@@ -22,6 +22,7 @@ from analysis.fetcher import (
     get_technicals,
 )
 from analysis.scorer import run_rules
+from analysis.financials import FinancialDataError
 from analysis.streaming import keepalive_stream, failure_reason
 from analysis.summarizer import generate_debate, generate_stock_pitches, rank_stocks, get_ai_error
 from analysis.congress_trades import (
@@ -51,6 +52,8 @@ def analyze(symbol: str):
     symbol = symbol.upper().strip()
     try:
         data = fetch_all(symbol)
+    except FinancialDataError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -108,6 +111,8 @@ def analyze(symbol: str):
         "change_pct": change_pct,
         "kpis": kpis,
         "fundamentals": fundamentals,
+        "financial_data_source": "FinDataEngine / SEC filings",
+        "financial_period_end": data["fins"][0]["end_date"],
         "technicals": get_technicals(data),
         "history": get_history(data),
         "news": get_news(data),
@@ -202,6 +207,7 @@ async def stock_selector():
 
         BATCH = 10
         candidates: list[dict] = []
+        missing_financials = 0
         for i in range(0, len(tickers), BATCH):
             batch = tickers[i:i + BATCH]
             end = min(i + BATCH, len(tickers))
@@ -211,6 +217,11 @@ async def stock_selector():
                 return_exceptions=True,
             )
             for result in batch_results:
+                if isinstance(result, FinancialDataError):
+                    if result.global_failure:
+                        raise result
+                    missing_financials += 1
+                    continue
                 if isinstance(result, Exception):
                     continue
                 ticker, data, score_data = result
@@ -226,14 +237,14 @@ async def stock_selector():
                 })
 
         if not candidates:
-            yield sse({"type": "error", "message": "Could not fetch data for any congressional pick."})
+            yield sse({"type": "error", "message": f"Could not fetch usable data for any congressional pick. {missing_financials} stocks lacked complete financial statements."})
             return
 
         candidates.sort(key=lambda c: c["rule_score"], reverse=True)
         top = candidates[:20]
         ticker_to_candidate = {c["ticker"]: c for c in top}
         print(f"[selector] phase2: {len(candidates)} rule-engine successes → top {len(top)}: {[c['ticker'] for c in top]}", flush=True)
-        yield sse({"type": "status", "message": f"Rule engine done. AI building cases for top {len(top)} stocks…"})
+        yield sse({"type": "status", "message": f"Rule engine done. {missing_financials} stocks skipped for unavailable financial statements. AI building cases for top {len(top)} stocks…"})
 
         # ── Phase 3: parallel pitch generation (semaphore 5) ─────────────────
         sem = asyncio.Semaphore(5)
